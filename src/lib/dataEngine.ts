@@ -187,20 +187,55 @@ export function searchLocationsLocal(query: string): GeoSearchResult[] {
 export async function searchLocations(query: string): Promise<GeoSearchResult[]> {
   if (!query.trim()) return [];
 
+  // Try OpenStreetMap Nominatim first for worldwide city/country coverage
   try {
-    const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/geocode?q=${encodeURIComponent(query)}`;
-    const headers: Record<string, string> = {
-      Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-      'Content-Type': 'application/json',
-    };
-    const response = await fetch(apiUrl, { headers });
-    if (!response.ok) throw new Error(`Geocoding failed (${response.status})`);
-    const data = await response.json();
-    if (!data || !Array.isArray(data.results)) throw new Error('Invalid geocoding response');
-    return data.results as GeoSearchResult[];
+    const nominatimUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=10&addressdetails=1`;
+    const response = await fetch(nominatimUrl, {
+      headers: { 'Accept-Language': 'en' },
+    });
+    if (!response.ok) throw new Error(`Nominatim failed (${response.status})`);
+    const data: NominatimResult[] = await response.json();
+    if (!Array.isArray(data) || data.length === 0) throw new Error('No Nominatim results');
+
+    const results: GeoSearchResult[] = data.map((item, idx) => {
+      const addr = item.address || {};
+      const city = addr.city || addr.town || addr.village || addr.county || '';
+      const country = addr.country || '';
+      const label = city || country || item.display_name?.split(',')[0] || 'Unknown';
+      const placeName = item.display_name?.split(',').slice(0, 3).join(',').trim() || label;
+
+      return {
+        id: `nominatim-${item.osm_id || idx}`,
+        label,
+        placeName,
+        lat: parseFloat(item.lat),
+        lng: parseFloat(item.lon),
+        country,
+        city,
+      };
+    });
+
+    return results;
   } catch {
+    // Fallback to local hardcoded database if Nominatim is unavailable
     return searchLocationsLocal(query);
   }
+}
+
+interface NominatimResult {
+  lat: string;
+  lon: string;
+  display_name: string;
+  osm_id?: number;
+  address?: {
+    city?: string;
+    town?: string;
+    village?: string;
+    county?: string;
+    country?: string;
+    country_code?: string;
+    state?: string;
+  };
 }
 
 export function getLocationFromCoords(lat: number, lng: number): LocationInfo {
