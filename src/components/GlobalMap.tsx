@@ -14,10 +14,8 @@ interface GlobalMapProps {
   isPro: boolean;
 }
 
-// CARTO vector basemaps with API key
-const CARTO_KEY = 'cb1_4d22_1_b1e4910826501c28d0d1fefa';
-const DARK_STYLE = `https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json?key=${CARTO_KEY}`;
-const LIGHT_STYLE = `https://basemaps.cartocdn.com/gl/positron-gl-style/style.json?key=${CARTO_KEY}`;
+const DARK_STYLE = 'https://tiles.openfreemap.org/styles/dark';
+const LIGHT_STYLE = 'https://tiles.openfreemap.org/styles/positron';
 
 function markerColor(type: MapMarker['type']): string {
   switch (type) {
