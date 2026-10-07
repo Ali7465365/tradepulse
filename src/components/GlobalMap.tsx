@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
+import MaplibreWorker from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker';
+
+// Fix worker for Vite / Bolt — must be set before any map is created
+(maplibregl as any).workerClass = MaplibreWorker;
 import { Search, MapPin, Navigation, X, Layers, ZoomIn, ZoomOut, Globe, Loader2 } from 'lucide-react';
 import { useTheme } from '@/context/ThemeContext';
 import { searchLocations, searchLocationsLocal, getMapMarkers, getLocationFromCoords, GeoSearchResult } from '@/lib/dataEngine';
