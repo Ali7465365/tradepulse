@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import * as maplibregl from 'maplibre-gl';
-import { Search, MapPin, Navigation, Store, Factory, Building2, X, Layers, ZoomIn, ZoomOut, Globe, Loader2 } from 'lucide-react';
+import 'maplibre-gl/dist/maplibre-gl.css'; // CRITICAL: Fixes blank canvas and invisible map tiles
+import { Search, MapPin, Navigation, X, Layers, ZoomIn, ZoomOut, Globe, Loader2 } from 'lucide-react';
 import { useTheme } from '@/context/ThemeContext';
 import { searchLocations, searchLocationsLocal, getMapMarkers, getLocationFromCoords, GeoSearchResult } from '@/lib/dataEngine';
 import { MapMarker, LocationInfo } from '@/lib/types';
@@ -25,7 +26,7 @@ function markerColor(type: MapMarker['type']): string {
   }
 }
 
-export default function GlobalMap({ location, product, onLocationChange, onMarkerSelect, isPro }: GlobalMapProps) {
+export default function GlobalMap({ location, product, onLocationChange, onMarkerSelect }: GlobalMapProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<maplibregl.Marker[]>([]);
@@ -36,7 +37,7 @@ export default function GlobalMap({ location, product, onLocationChange, onMarke
   const [showResults, setShowResults] = useState(false);
   const [searching, setSearching] = useState(false);
   const [markers, setMarkers] = useState<MapMarker[]>([]);
-  const [selectedMarker, setSelectedMarker] = useState<MapMarker | null>(null);
+  const [, setSelectedMarker] = useState<MapMarker | null>(null);
   const [zoom, setZoom] = useState(2);
   const [pitch, setPitch] = useState(0);
   const [bearing, setBearing] = useState(0);
@@ -68,6 +69,7 @@ export default function GlobalMap({ location, product, onLocationChange, onMarke
 
     map.on('load', () => {
       setMapLoaded(true);
+      map.resize(); // Force recalculation of container size
       setZoom(map.getZoom());
       setPitch(map.getPitch());
       setBearing(map.getBearing());
@@ -106,9 +108,14 @@ export default function GlobalMap({ location, product, onLocationChange, onMarke
         const layout = map.getLayoutProperty(layer.id, 'text-field');
         if (layout) {
           try {
-            map.setLayoutProperty(layer.id, 'text-field', ['coalesce', ['get', 'name_en'], ['get', 'name'], ['get', 'name:en']]);
+            map.setLayoutProperty(layer.id, 'text-field', [
+              'coalesce',
+              ['get', 'name_en'],
+              ['get', 'name:en'],
+              ['get', 'name']
+            ]);
           } catch {
-            // skip layers that can't be modified
+            // Skip layers that cannot be modified
           }
         }
       }
@@ -124,6 +131,7 @@ export default function GlobalMap({ location, product, onLocationChange, onMarke
     setMapLoaded(false);
     mapRef.current.once('load', () => {
       setMapLoaded(true);
+      mapRef.current?.resize();
       forceEnglishLabels(mapRef.current!);
     });
   }, [theme]);
@@ -198,12 +206,10 @@ export default function GlobalMap({ location, product, onLocationChange, onMarke
       return;
     }
 
-    // Show local results immediately for responsiveness
     const localResults = searchLocationsLocal(query);
     setSearchResults(localResults);
     setShowResults(true);
 
-    // Then fetch from edge function for broader coverage
     setSearching(true);
     searchTimerRef.current = setTimeout(async () => {
       const results = await searchLocations(query);
@@ -256,7 +262,7 @@ export default function GlobalMap({ location, product, onLocationChange, onMarke
   };
 
   return (
-    <div className="relative w-full h-full overflow-hidden rounded-2xl border border-[var(--tp-border)]">
+    <div className="relative w-full h-full min-h-[500px] overflow-hidden rounded-2xl border border-[var(--tp-border)]">
       {/* Search bar overlay */}
       <div className="absolute top-4 left-4 right-4 z-20 flex items-center gap-3">
         <div className="relative flex-1 max-w-md">
@@ -401,7 +407,7 @@ export default function GlobalMap({ location, product, onLocationChange, onMarke
       )}
 
       {/* Map container */}
-      <div ref={mapContainer} className={`w-full h-full ${theme === 'dark' ? 'dark-map' : ''}`} />
+      <div ref={mapContainer} className={`w-full h-full min-h-[500px] ${theme === 'dark' ? 'dark-map' : ''}`} />
     </div>
   );
 }
