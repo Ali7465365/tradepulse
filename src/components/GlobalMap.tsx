@@ -14,9 +14,10 @@ interface GlobalMapProps {
   isPro: boolean;
 }
 
-// CARTO vector basemaps — free, no API key required, worldwide coverage
-const DARK_STYLE = 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json';
-const LIGHT_STYLE = 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json';
+// CARTO vector basemaps with API key
+const CARTO_KEY = 'cb1_4d22_1_b1e4910826501c28d0d1fefa';
+const DARK_STYLE = `https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json?key=${CARTO_KEY}`;
+const LIGHT_STYLE = `https://basemaps.cartocdn.com/gl/positron-gl-style/style.json?key=${CARTO_KEY}`;
 
 function markerColor(type: MapMarker['type']): string {
   switch (type) {
