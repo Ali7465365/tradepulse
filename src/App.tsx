@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import GlobalMap from './components/GlobalMap';
 import MarketResearch from './components/MarketResearch';
 import SellersSection from './components/SellersSection';
-import Pricingpage from './components/Pricingpage';
+import PricingPage from './components/PricingPage';
 import { getMarketAnalytics } from './lib/dataEngine';
 import { LocationInfo, MapMarker, MarketAnalytics } from './lib/types';
 
@@ -73,7 +73,7 @@ export default function App() {
         </div>
       </main>
 
-      <Pricingpage isPro={isPro} onUpgrade={() => setIsPro(true)} />
+      <PricingPage isPro={isPro} onUpgrade={() => setIsPro(true)} />
     </div>
   );
 }
