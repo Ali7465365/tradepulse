@@ -8,14 +8,17 @@ const COUNTRIES: { code: string; name: string; lat: number; lng: number }[] = [
   { code: 'JP', name: 'Japan', lat: 36.2048, lng: 138.2529 },
   { code: 'GB', name: 'United Kingdom', lat: 55.3781, lng: -3.4360 },
   { code: 'PK', name: 'Pakistan', lat: 30.3753, lng: 69.3451 },
+  { code: 'AE', name: 'United Arab Emirates', lat: 23.4241, lng: 53.8478 },
 ];
 
 const CITIES: { name: string; country: string; countryCode: string; lat: number; lng: number }[] = [
   { name: 'Shanghai', country: 'China', countryCode: 'CN', lat: 31.2304, lng: 121.4737 },
-  { name: 'New York', country: 'United States', countryCode: 'US', lat: 40.7128, lng: -74.0060 },
   { name: 'Karachi', country: 'Pakistan', countryCode: 'PK', lat: 24.8607, lng: 67.0011 },
   { name: 'Lahore', country: 'Pakistan', countryCode: 'PK', lat: 31.5204, lng: 74.3587 },
+  { name: 'Islamabad', country: 'Pakistan', countryCode: 'PK', lat: 33.6844, lng: 73.0479 },
+  { name: 'New York', country: 'United States', countryCode: 'US', lat: 40.7128, lng: -74.0060 },
   { name: 'London', country: 'United Kingdom', countryCode: 'GB', lat: 51.5074, lng: -0.1278 },
+  { name: 'Dubai', country: 'United Arab Emirates', countryCode: 'AE', lat: 25.2048, lng: 55.2708 },
 ];
 
 export interface GeoSearchResult {
@@ -29,7 +32,7 @@ export interface GeoSearchResult {
 }
 
 export function searchLocationsLocal(query: string): GeoSearchResult[] {
-  if (!query?.trim()) return [];
+  if (!query.trim()) return [];
   const q = query.toLowerCase();
 
   const cityMatches = CITIES.filter(
@@ -60,7 +63,7 @@ export function searchLocationsLocal(query: string): GeoSearchResult[] {
 }
 
 export async function searchLocations(query: string): Promise<GeoSearchResult[]> {
-  if (!query?.trim()) return [];
+  if (!query.trim()) return [];
 
   try {
     const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=10&addressdetails=1&accept-language=en`;
@@ -128,38 +131,36 @@ export async function getMarketAnalytics(product: string, location: LocationInfo
     
     if (response.ok) {
       const data = await response.json();
-      if (data && data.data && data.data.length > 0) {
-        const primaryRecord = data.data[0];
-        const primaryVal = primaryRecord.primaryValue || 50000000;
-
+      if (data?.data?.length > 0) {
+        const val = data.data[0].primaryValue || 50000000;
         return {
-          demandScore: primaryVal > 100000000 ? 'High' : 'Medium',
-          demandPercent: Math.min(95, Math.max(40, Math.floor((primaryVal / 200000000) * 100))),
+          demandScore: val > 100000000 ? 'High' : 'Medium',
+          demandPercent: Math.min(95, Math.max(40, Math.floor((val / 200000000) * 100))),
           averagePrice: 45.00,
           currency: 'USD',
-          requiredQuantity: Math.floor(primaryVal / 1000),
-          deficit: Math.floor((primaryVal / 1000) * 0.25),
+          requiredQuantity: Math.floor(val / 1000),
+          deficit: Math.floor((val / 1000) * 0.25),
           viabilityScore: 8.4,
           viabilityPercent: 84,
           popularity: 78,
           importNeed: 'High',
           trend: 'rising',
-          marketSize: `$${(primaryVal / 1000000000).toFixed(1)}B`,
+          marketSize: `$${(val / 1000000000).toFixed(1)}B`,
           competitorCount: 142,
         };
       }
     }
   } catch (e) {
-    console.warn('UN Comtrade API unavailable, providing domain fallback', e);
+    console.warn('UN Comtrade unavailable, fallback to calculation', e);
   }
 
-  const pLength = (product || 'general').length;
-  const baseDemand = 50 + (pLength * 3) % 40;
+  const pLen = (product || 'general').length;
+  const baseDemand = 50 + (pLen * 3) % 40;
   
   return {
     demandScore: baseDemand > 75 ? 'High' : baseDemand > 55 ? 'Medium' : 'Low',
     demandPercent: baseDemand,
-    averagePrice: Math.round((12 + (pLength * 4.5)) * 100) / 100,
+    averagePrice: Math.round((12 + (pLen * 4.5)) * 100) / 100,
     currency: 'USD',
     requiredQuantity: 12500,
     deficit: 3100,
@@ -168,7 +169,7 @@ export async function getMarketAnalytics(product: string, location: LocationInfo
     popularity: 68,
     importNeed: baseDemand > 65 ? 'High' : 'Medium',
     trend: 'rising',
-    marketSize: `$${(1.2 + (pLength * 0.4)).toFixed(1)}B`,
+    marketSize: `$${(1.2 + (pLen * 0.4)).toFixed(1)}B`,
     competitorCount: 48,
   };
 }
@@ -186,15 +187,13 @@ export async function getMapMarkers(product: string, location: LocationInfo): Pr
     `;
 
     const response = await fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`);
-    if (!response.ok) throw new Error('Overpass query failed');
+    if (!response.ok) throw new Error('Overpass failed');
 
     const data = await response.json();
-    if (!data.elements || data.elements.length === 0) {
-      throw new Error('No physical stores returned');
-    }
+    if (!data.elements || data.elements.length === 0) throw new Error('No physical nodes found');
 
     return data.elements.slice(0, 10).map((el: any, index: number) => {
-      const realName = el.tags['name:en'] || el.tags.name || `${el.tags.shop || el.tags.craft || 'Trade'} Store`;
+      const realName = el.tags['name:en'] || el.tags.name || `${el.tags.shop || el.tags.craft || 'Trade'} Node`;
       const type: MapMarker['type'] = index % 3 === 0 ? 'store' : index % 3 === 1 ? 'wholesale' : 'production';
       
       return {
@@ -214,37 +213,21 @@ export async function getMapMarkers(product: string, location: LocationInfo): Pr
         proLocked: type !== 'store',
       };
     });
-  } catch (err) {
-    console.warn('Overpass API offline or empty, providing fallback stores', err);
-    
+  } catch {
     return [
       {
-        id: `fb-1-${location.city || 'default'}`,
-        name: `${location.city || 'Global'} Central Market Hub`,
+        id: `fb-1-${location.city}`,
+        name: `${location.city || 'Global'} Trade Hub`,
         type: 'store',
         lat: location.lat + 0.01,
         lng: location.lng + 0.01,
-        address: `Commercial Zone, ${location.city || location.country}`,
+        address: `Commercial District, ${location.city}`,
         rating: 4.5,
         originalPrice: 20.00,
         bulkPrice: 15.00,
         verified: true,
         popularity: 88,
         proLocked: false,
-      },
-      {
-        id: `fb-2-${location.city || 'default'}`,
-        name: `${location.country} Wholesale Logistics`,
-        type: 'wholesale',
-        lat: location.lat - 0.015,
-        lng: location.lng - 0.012,
-        address: `Industrial Sector, ${location.city || location.country}`,
-        rating: 4.2,
-        originalPrice: 18.00,
-        bulkPrice: 12.50,
-        verified: true,
-        popularity: 76,
-        proLocked: true,
       }
     ];
   }
