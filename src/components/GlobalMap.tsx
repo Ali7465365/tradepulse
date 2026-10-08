@@ -1,14 +1,10 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import maplibregl from 'maplibre-gl';
+import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import MaplibreWorker from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker';
 import { Search, MapPin, Navigation, X, Layers, ZoomIn, ZoomOut, Globe, Loader2 } from 'lucide-react';
 import { useTheme } from '@/context/ThemeContext';
 import { searchLocations, searchLocationsLocal, getMapMarkers, getLocationFromCoords, GeoSearchResult } from '@/lib/dataEngine';
 import { MapMarker, LocationInfo } from '@/lib/types';
-
-// Fix worker for Vite / Bolt — must run before any map is created
-maplibregl.workerClass = MaplibreWorker;
 
 interface GlobalMapProps {
   location: LocationInfo;
@@ -119,7 +115,7 @@ export default function GlobalMap({ location, product, onLocationChange, onMarke
       setBearing(map.getBearing());
     });
 
-    map.on('click', (e) => {
+    map.on('click', (e: maplibregl.MapMouseEvent) => {
       const loc = getLocationFromCoords(e.lngLat.lat, e.lngLat.lng);
       onLocationChange(loc);
     });
