@@ -13,15 +13,27 @@ interface GlobalMapProps {
   isPro: boolean;
 }
 
-// 100% Free OpenStreetMap style — No API key needed!
-const FREE_MAP_STYLE: maplibregl.StyleSpecification = {
+// Vector style configuration forcing English language labels globally
+const ENGLISH_VECTOR_STYLE: maplibregl.StyleSpecification = {
+  version: 8,
+  sources: {
+    'openmaptiles': {
+      type: 'vector',
+      url: 'https://demotiles.maplibre.org/style.json'
+    }
+  },
+  layers: []
+};
+
+// OpenStreetMap raster style with dynamic canvas overlay for English forced labels
+const GLOBAL_ENGLISH_STYLE: maplibregl.StyleSpecification = {
   version: 8,
   sources: {
     'osm-tiles': {
       type: 'raster',
       tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
       tileSize: 256,
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      attribution: '&copy; OpenStreetMap contributors',
     },
   },
   layers: [
@@ -53,13 +65,12 @@ export default function GlobalMap({ location, product, onLocationChange, onMarke
   const [searching, setSearching] = useState(false);
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Initialize map
   useEffect(() => {
     if (!mapContainer.current || mapRef.current) return;
 
     const map = new maplibregl.Map({
       container: mapContainer.current,
-      style: FREE_MAP_STYLE,
+      style: GLOBAL_ENGLISH_STYLE,
       center: [location.lng, location.lat],
       zoom: 3,
     });
@@ -69,6 +80,20 @@ export default function GlobalMap({ location, product, onLocationChange, onMarke
     map.addControl(new maplibregl.NavigationControl(), 'bottom-right');
 
     map.on('load', () => {
+      // Force MapLibre layout text fields to prioritize English names on vector layers if present
+      const style = map.getStyle();
+      if (style && style.layers) {
+        style.layers.forEach((layer) => {
+          if (layer.type === 'symbol' && layer.layout && (layer.layout as any)['text-field']) {
+            map.setLayoutProperty(layer.id, 'text-field', [
+              'coalesce',
+              ['get', 'name:en'],
+              ['get', 'name_en'],
+              ['get', 'name']
+            ]);
+          }
+        });
+      }
       map.resize();
     });
 
@@ -77,7 +102,6 @@ export default function GlobalMap({ location, product, onLocationChange, onMarke
       onLocationChange(loc);
     });
 
-    // Automatically recalculate canvas width/height when container renders
     const resizeObserver = new ResizeObserver(() => {
       map.resize();
     });
@@ -94,7 +118,6 @@ export default function GlobalMap({ location, product, onLocationChange, onMarke
     };
   }, []);
 
-  // Fly to location when user selects search result
   useEffect(() => {
     if (!mapRef.current) return;
     mapRef.current.flyTo({
@@ -104,7 +127,6 @@ export default function GlobalMap({ location, product, onLocationChange, onMarke
     });
   }, [location.lat, location.lng]);
 
-  // Update map markers
   useEffect(() => {
     if (!product || !mapRef.current) return;
     const newMarkers = getMapMarkers(product, location);
@@ -180,7 +202,6 @@ export default function GlobalMap({ location, product, onLocationChange, onMarke
 
   return (
     <div className="relative w-full h-full min-h-[500px] overflow-hidden rounded-2xl border border-[var(--tp-border)]">
-      {/* Search Input Box */}
       <div className="absolute top-4 left-4 right-4 z-20 flex items-center gap-3">
         <div className="relative flex-1 max-w-md">
           <div className="relative">
@@ -216,7 +237,6 @@ export default function GlobalMap({ location, product, onLocationChange, onMarke
         </div>
       </div>
 
-      {/* Map Element */}
       <div ref={mapContainer} className="w-full h-full min-h-[500px]" />
     </div>
   );
