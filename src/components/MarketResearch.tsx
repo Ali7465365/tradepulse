@@ -1,4 +1,4 @@
-import { MarketAnalytics, LocationInfo } from '@/lib/types';
+import { MarketAnalytics, LocationInfo } from '../lib/types';
 import { Loader2, TrendingUp, DollarSign, Package } from 'lucide-react';
 
 interface MarketResearchProps {
