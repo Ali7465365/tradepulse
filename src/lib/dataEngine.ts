@@ -7,35 +7,15 @@ const COUNTRIES: { code: string; name: string; lat: number; lng: number }[] = [
   { code: 'DE', name: 'Germany', lat: 51.1657, lng: 10.4515 },
   { code: 'JP', name: 'Japan', lat: 36.2048, lng: 138.2529 },
   { code: 'GB', name: 'United Kingdom', lat: 55.3781, lng: -3.4360 },
-  { code: 'BR', name: 'Brazil', lat: -14.2350, lng: -51.9253 },
-  { code: 'AE', name: 'United Arab Emirates', lat: 23.4241, lng: 53.8478 },
-  { code: 'KR', name: 'South Korea', lat: 35.9078, lng: 127.7669 },
-  { code: 'TR', name: 'Turkey', lat: 38.9637, lng: 35.2433 },
-  { code: 'VN', name: 'Vietnam', lat: 14.0583, lng: 108.2772 },
-  { code: 'BD', name: 'Bangladesh', lat: 23.6850, lng: 90.3563 },
-  { code: 'IT', name: 'Italy', lat: 41.8719, lng: 12.5674 },
-  { code: 'FR', name: 'France', lat: 46.2276, lng: 2.2137 },
-  { code: 'MX', name: 'Mexico', lat: 23.6345, lng: -102.5528 },
-  { code: 'NG', name: 'Nigeria', lat: 9.0820, lng: 8.6753 },
-  { code: 'EG', name: 'Egypt', lat: 26.8206, lng: 30.8025 },
-  { code: 'ZA', name: 'South Africa', lat: -30.5595, lng: 22.9375 },
   { code: 'PK', name: 'Pakistan', lat: 30.3753, lng: 69.3451 },
-  { code: 'SA', name: 'Saudi Arabia', lat: 23.8859, lng: 45.0792 },
-  { code: 'ES', name: 'Spain', lat: 40.4637, lng: -3.7492 },
-  { code: 'CA', name: 'Canada', lat: 56.1304, lng: -106.3468 },
-  { code: 'AU', name: 'Australia', lat: -25.2744, lng: 133.7751 },
 ];
 
 const CITIES: { name: string; country: string; countryCode: string; lat: number; lng: number }[] = [
   { name: 'Shanghai', country: 'China', countryCode: 'CN', lat: 31.2304, lng: 121.4737 },
-  { name: 'Guangzhou', country: 'China', countryCode: 'CN', lat: 23.1291, lng: 113.2644 },
-  { name: 'Beijing', country: 'China', countryCode: 'CN', lat: 39.9042, lng: 116.4074 },
+  { name: 'New York', country: 'United States', countryCode: 'US', lat: 40.7128, lng: -74.0060 },
   { name: 'Karachi', country: 'Pakistan', countryCode: 'PK', lat: 24.8607, lng: 67.0011 },
   { name: 'Lahore', country: 'Pakistan', countryCode: 'PK', lat: 31.5204, lng: 74.3587 },
-  { name: 'New York', country: 'United States', countryCode: 'US', lat: 40.7128, lng: -74.0060 },
-  { name: 'Mumbai', country: 'India', countryCode: 'IN', lat: 19.0760, lng: 72.8777 },
   { name: 'London', country: 'United Kingdom', countryCode: 'GB', lat: 51.5074, lng: -0.1278 },
-  { name: 'Tokyo', country: 'Japan', countryCode: 'JP', lat: 35.6762, lng: 139.6503 },
 ];
 
 export interface GeoSearchResult {
@@ -49,7 +29,7 @@ export interface GeoSearchResult {
 }
 
 export function searchLocationsLocal(query: string): GeoSearchResult[] {
-  if (!query.trim()) return [];
+  if (!query?.trim()) return [];
   const q = query.toLowerCase();
 
   const cityMatches = CITIES.filter(
@@ -80,7 +60,7 @@ export function searchLocationsLocal(query: string): GeoSearchResult[] {
 }
 
 export async function searchLocations(query: string): Promise<GeoSearchResult[]> {
-  if (!query.trim()) return [];
+  if (!query?.trim()) return [];
 
   try {
     const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=10&addressdetails=1&accept-language=en`;
@@ -141,10 +121,6 @@ export function getLocationFromCoords(lat: number, lng: number): LocationInfo {
   };
 }
 
-/**
- * FETCH REAL MARKET RESEARCH DATA
- * Live UN Comtrade API for actual trade figures with structured domain fallbacks.
- */
 export async function getMarketAnalytics(product: string, location: LocationInfo): Promise<MarketAnalytics> {
   try {
     const tradeUrl = `https://comtradeapi.un.org/public/v1/preview/C/A/HS?reporterCode=0&period=2022`;
@@ -174,7 +150,7 @@ export async function getMarketAnalytics(product: string, location: LocationInfo
       }
     }
   } catch (e) {
-    console.warn('UN Comtrade API offline, applying dynamic trade model', e);
+    console.warn('UN Comtrade API unavailable, providing domain fallback', e);
   }
 
   const pLength = (product || 'general').length;
@@ -197,10 +173,6 @@ export async function getMarketAnalytics(product: string, location: LocationInfo
   };
 }
 
-/**
- * FETCH REAL MAP MARKERS / STORE NAMES
- * Live OpenStreetMap Overpass API for registered nodes (shop, craft, industrial).
- */
 export async function getMapMarkers(product: string, location: LocationInfo): Promise<MapMarker[]> {
   try {
     const query = `
@@ -222,7 +194,7 @@ export async function getMapMarkers(product: string, location: LocationInfo): Pr
     }
 
     return data.elements.slice(0, 10).map((el: any, index: number) => {
-      const realName = el.tags['name:en'] || el.tags.name || `${el.tags.shop || el.tags.craft || 'Trade'} Shop`;
+      const realName = el.tags['name:en'] || el.tags.name || `${el.tags.shop || el.tags.craft || 'Trade'} Store`;
       const type: MapMarker['type'] = index % 3 === 0 ? 'store' : index % 3 === 1 ? 'wholesale' : 'production';
       
       return {
@@ -243,16 +215,16 @@ export async function getMapMarkers(product: string, location: LocationInfo): Pr
       };
     });
   } catch (err) {
-    console.warn('Overpass API empty, using fallback nodes', err);
+    console.warn('Overpass API offline or empty, providing fallback stores', err);
     
     return [
       {
-        id: `fb-1-${location.city}`,
+        id: `fb-1-${location.city || 'default'}`,
         name: `${location.city || 'Global'} Central Market Hub`,
         type: 'store',
         lat: location.lat + 0.01,
         lng: location.lng + 0.01,
-        address: `Commercial District, ${location.city}`,
+        address: `Commercial Zone, ${location.city || location.country}`,
         rating: 4.5,
         originalPrice: 20.00,
         bulkPrice: 15.00,
@@ -261,12 +233,12 @@ export async function getMapMarkers(product: string, location: LocationInfo): Pr
         proLocked: false,
       },
       {
-        id: `fb-2-${location.city}`,
+        id: `fb-2-${location.city || 'default'}`,
         name: `${location.country} Wholesale Logistics`,
         type: 'wholesale',
         lat: location.lat - 0.015,
         lng: location.lng - 0.012,
-        address: `Industrial Area, ${location.city}`,
+        address: `Industrial Sector, ${location.city || location.country}`,
         rating: 4.2,
         originalPrice: 18.00,
         bulkPrice: 12.50,
