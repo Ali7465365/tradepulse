@@ -14,9 +14,42 @@ interface GlobalMapProps {
   isPro: boolean;
 }
 
-// OpenFreeMap — free, no API key
-const DARK_STYLE = 'https://tiles.openfreemap.org/styles/dark';
-const LIGHT_STYLE = 'https://tiles.openfreemap.org/styles/positron';
+// Self-contained raster style — no external style JSON fetch, no API key, no worker issues
+function buildMapStyle(dark: boolean): maplibregl.StyleSpecification {
+  const bg = dark ? '#0a0e1a' : '#f8fafc';
+
+  return {
+    version: 8,
+    sources: {
+      'osm-raster': {
+        type: 'raster',
+        tiles: [
+          'https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
+          'https://b.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
+          'https://c.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
+        ],
+        tileSize: 256,
+        attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+        maxzoom: 20,
+      },
+      'osm-labels': {
+        type: 'raster',
+        tiles: [
+          'https://a.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}.png',
+          'https://b.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}.png',
+          'https://c.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}.png',
+        ],
+        tileSize: 256,
+        maxzoom: 20,
+      },
+    },
+    layers: [
+      { id: 'background', type: 'background', paint: { 'background-color': bg } },
+      { id: 'osm-tiles', type: 'raster', source: 'osm-raster', minzoom: 0, maxzoom: 20 },
+      { id: 'osm-labels-layer', type: 'raster', source: 'osm-labels', minzoom: 0, maxzoom: 20 },
+    ],
+  } as maplibregl.StyleSpecification;
+};
 
 function markerColor(type: MapMarker['type']): string {
   switch (type) {
@@ -47,35 +80,13 @@ export default function GlobalMap({ location, product, onLocationChange, onMarke
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isFirstTheme = useRef(true);
 
-  const forceEnglishLabels = useCallback((map: maplibregl.Map) => {
-    const style = map.getStyle();
-    if (!style || !style.layers) return;
-
-    for (const layer of style.layers) {
-      if (layer.type !== 'symbol') continue;
-      try {
-        const currentField = map.getLayoutProperty(layer.id, 'text-field');
-        if (currentField) {
-          map.setLayoutProperty(layer.id, 'text-field', [
-            'coalesce',
-            ['get', 'name_en'],
-            ['get', 'name:en'],
-            ['get', 'name'],
-          ]);
-        }
-      } catch {
-        // some layers can't be modified — skip silently
-      }
-    }
-  }, []);
-
   // Initialize map (only once)
   useEffect(() => {
     if (!mapContainer.current || mapRef.current) return;
 
     const map = new maplibregl.Map({
       container: mapContainer.current,
-      style: theme === 'dark' ? DARK_STYLE : LIGHT_STYLE,
+      style: buildMapStyle(theme === 'dark'),
       center: [location.lng, location.lat],
       zoom: 3,
       pitch: 0,
@@ -94,12 +105,10 @@ export default function GlobalMap({ location, product, onLocationChange, onMarke
 
     map.on('load', () => {
       setMapLoaded(true);
-      forceEnglishLabels(map);
       map.resize();
     });
 
     map.on('style.load', () => {
-      forceEnglishLabels(map);
       setMapLoaded(true);
       map.resize();
     });
@@ -145,7 +154,7 @@ export default function GlobalMap({ location, product, onLocationChange, onMarke
       return;
     }
     setMapLoaded(false);
-    mapRef.current.setStyle(theme === 'dark' ? DARK_STYLE : LIGHT_STYLE);
+    mapRef.current.setStyle(buildMapStyle(theme === 'dark'));
   }, [theme]);
 
   // Fly to location
