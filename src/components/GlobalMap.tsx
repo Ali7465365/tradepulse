@@ -248,4 +248,4 @@ export async function getMapMarkers(product: string, location: LocationInfo): Pr
       }
     ];
   }
-}
+}  
