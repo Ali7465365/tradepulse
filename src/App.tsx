@@ -69,7 +69,11 @@ export default function App() {
             product={product}
             location={location}
           />
-          <SellersSection selectedMarker={selectedMarker} isPro={isPro} />
+          <SellersSection
+            selectedMarker={selectedMarker}
+            location={location}
+            isPro={isPro}
+          />
         </div>
       </main>
 
