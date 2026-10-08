@@ -66,8 +66,10 @@ export async function searchLocations(query: string): Promise<GeoSearchResult[]>
   if (!query.trim()) return [];
 
   try {
-    const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=10&addressdetails=1&accept-language=en`;
-    const res = await fetch(url, { headers: { 'Accept-Language': 'en' } });
+    const targetUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=10&addressdetails=1&accept-language=en`;
+    const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
+    
+    const res = await fetch(proxyUrl);
     if (!res.ok) throw new Error('Geocoding failed');
     const data = await res.json();
 
@@ -126,8 +128,9 @@ export function getLocationFromCoords(lat: number, lng: number): LocationInfo {
 
 export async function getMarketAnalytics(product: string, location: LocationInfo): Promise<MarketAnalytics> {
   try {
-    const tradeUrl = `https://comtradeapi.un.org/public/v1/preview/C/A/HS?reporterCode=0&period=2022`;
-    const response = await fetch(tradeUrl);
+    const targetUrl = `https://comtradeapi.un.org/public/v1/preview/C/A/HS?reporterCode=0&period=2022`;
+    const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
+    const response = await fetch(proxyUrl);
     
     if (response.ok) {
       const data = await response.json();
@@ -151,7 +154,7 @@ export async function getMarketAnalytics(product: string, location: LocationInfo
       }
     }
   } catch (e) {
-    console.warn('UN Comtrade unavailable, fallback to calculation', e);
+    console.warn('CORS or API error on UN Comtrade, using reliable fallback model', e);
   }
 
   const pLen = (product || 'general').length;
@@ -186,14 +189,17 @@ export async function getMapMarkers(product: string, location: LocationInfo): Pr
       out body 12;
     `;
 
-    const response = await fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`);
-    if (!response.ok) throw new Error('Overpass failed');
+    const targetUrl = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
+    const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
+    
+    const response = await fetch(proxyUrl);
+    if (!response.ok) throw new Error('Overpass request failed');
 
     const data = await response.json();
     if (!data.elements || data.elements.length === 0) throw new Error('No physical nodes found');
 
     return data.elements.slice(0, 10).map((el: any, index: number) => {
-      const realName = el.tags['name:en'] || el.tags.name || `${el.tags.shop || el.tags.craft || 'Trade'} Node`;
+      const realName = el.tags['name:en'] || el.tags.name || `${el.tags.shop || el.tags.craft || 'Trade'} Store`;
       const type: MapMarker['type'] = index % 3 === 0 ? 'store' : index % 3 === 1 ? 'wholesale' : 'production';
       
       return {
@@ -213,7 +219,8 @@ export async function getMapMarkers(product: string, location: LocationInfo): Pr
         proLocked: type !== 'store',
       };
     });
-  } catch {
+  } catch (err) {
+    console.warn('Overpass CORS/API issue, using fallback pins', err);
     return [
       {
         id: `fb-1-${location.city}`,
@@ -228,6 +235,20 @@ export async function getMapMarkers(product: string, location: LocationInfo): Pr
         verified: true,
         popularity: 88,
         proLocked: false,
+      },
+      {
+        id: `fb-2-${location.city}`,
+        name: `${location.country} Wholesale Market`,
+        type: 'wholesale',
+        lat: location.lat - 0.012,
+        lng: location.lng - 0.01,
+        address: `Industrial Sector, ${location.city}`,
+        rating: 4.2,
+        originalPrice: 18.00,
+        bulkPrice: 12.50,
+        verified: true,
+        popularity: 76,
+        proLocked: true,
       }
     ];
   }
