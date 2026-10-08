@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import MarketResearch from './MarketResearch';
-import PricingPage from './PricingPage';
-import SellerSection from './SellerSection';
+import MarketResearch from './components/MarketResearch';
+import GlobalMap from './components/GlobalMap';
+import PricingPage from './components/PricingPage';
+import SellerSection from './components/SellerSection';
 import { getMapMarkers } from './lib/dataEngine';
 import { LocationInfo, MapMarker } from './lib/types';
 import { Search, MapPin, Loader2 } from 'lucide-react';
@@ -113,36 +114,11 @@ export default function App() {
         )}
 
         {activeTab === 'map' && (
-          <div className="space-y-4">
-            <h2 className="text-lg font-semibold text-slate-200 flex items-center gap-2">
-              <MapPin size={20} className="text-blue-500" /> Real Stores Near {location.city || location.country}
-            </h2>
-            {loadingMarkers ? (
-              <div className="flex items-center justify-center p-12 bg-slate-900 rounded-2xl border border-slate-800">
-                <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {markers.map((m) => (
-                  <div
-                    key={m.id}
-                    onClick={() => setSelectedMarker(m)}
-                    className={`p-4 rounded-xl border cursor-pointer transition-all ${selectedMarker?.id === m.id ? 'bg-blue-500/10 border-blue-500' : 'bg-slate-900 border-slate-800 hover:border-slate-700'}`}
-                  >
-                    <div className="flex justify-between items-start">
-                      <h3 className="font-semibold text-slate-100">{m.name}</h3>
-                      <span className="text-xs px-2 py-0.5 rounded bg-slate-800 text-slate-300 capitalize">{m.type}</span>
-                    </div>
-                    <p className="text-xs text-slate-400 mt-1">{m.address}</p>
-                    <div className="flex justify-between items-center mt-3 text-xs">
-                      <span className="text-slate-400">Rating: <strong className="text-amber-400">{m.rating} ★</strong></span>
-                      <span className="text-slate-400">Bulk Price: <strong className="text-emerald-400">${m.bulkPrice}</strong></span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          <GlobalMap
+            product={product}
+            location={location}
+            onMarkerSelect={(marker) => setSelectedMarker(marker)}
+          />
         )}
 
         {activeTab === 'sellers' && (
