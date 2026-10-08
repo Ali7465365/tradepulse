@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
 import MarketResearch from './components/MarketResearch';
 import GlobalMap from './components/GlobalMap';
-import PricingPage from './components/PricingPage';
 import SellerSection from './components/SellerSection';
+import PricingPage from './components/PricingPage';
 import { getMapMarkers } from './lib/dataEngine';
 import { LocationInfo, MapMarker } from './lib/types';
-import { Search, MapPin, Loader2 } from 'lucide-react';
+import { Search } from 'lucide-react';
 
 export default function App() {
   const [product, setProduct] = useState<string>('Electronics');
