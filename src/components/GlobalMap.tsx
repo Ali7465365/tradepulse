@@ -1,184 +1,217 @@
-import { useEffect, useState } from 'react';
-import { getMapMarkers } from '../lib/dataEngine';
-import { MapMarker, LocationInfo } from '../lib/types';
-import { MapPin, Store, Building2, Factory, ShieldCheck, Loader2 } from 'lucide-react';
+import { useEffect, useRef, useState, useCallback } from 'react';
+import * as maplibregl from 'maplibre-gl';
+import 'maplibre-gl/dist/maplibre-gl.css';
+import { Search, MapPin, Loader2 } from 'lucide-react';
+import { searchLocations, searchLocationsLocal, getMapMarkers, getLocationFromCoords, GeoSearchResult } from '@/lib/dataEngine';
+import { MapMarker, LocationInfo } from '@/lib/types';
 
 interface GlobalMapProps {
   location: LocationInfo;
   product: string;
-  onLocationChange?: (loc: LocationInfo) => void;
-  onMarkerSelect?: (marker: MapMarker | null) => void;
-  isPro?: boolean;
+  onLocationChange: (loc: LocationInfo) => void;
+  onMarkerSelect: (marker: MapMarker) => void;
+  isPro: boolean;
 }
 
-export default function GlobalMap({ location, product, onMarkerSelect }: GlobalMapProps) {
-  const [markers, setMarkers] = useState<MapMarker[]>([]);
-  const [selected, setSelected] = useState<MapMarker | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
+const GLOBAL_ENGLISH_STYLE: maplibregl.StyleSpecification = {
+  version: 8,
+  sources: {
+    'osm-tiles': {
+      type: 'raster',
+      tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+      tileSize: 256,
+      attribution: '&copy; OpenStreetMap contributors',
+    },
+  },
+  layers: [
+    {
+      id: 'osm-tiles-layer',
+      type: 'raster',
+      source: 'osm-tiles',
+      minzoom: 0,
+      maxzoom: 19,
+    },
+  ],
+};
+
+function markerColor(type: MapMarker['type']): string {
+  switch (type) {
+    case 'store': return '#3b82f6';
+    case 'wholesale': return '#f59e0b';
+    case 'production': return '#10b981';
+  }
+}
+
+export default function GlobalMap({ location, product, onLocationChange, onMarkerSelect }: GlobalMapProps) {
+  const mapContainer = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<maplibregl.Map | null>(null);
+  const markersRef = useRef<maplibregl.Marker[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<GeoSearchResult[]>([]);
+  const [showResults, setShowResults] = useState(false);
+  const [searching, setSearching] = useState(false);
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    let isMounted = true;
-    setLoading(true);
+    if (!mapContainer.current || mapRef.current) return;
 
-    getMapMarkers(product, location)
-      .then((data) => {
-        if (isMounted) {
-          const list = data || [];
-          setMarkers(list);
-          if (list.length > 0) {
-            setSelected(list[0]);
-            if (onMarkerSelect) onMarkerSelect(list[0]);
-          } else {
-            setSelected(null);
-            if (onMarkerSelect) onMarkerSelect(null);
-          }
-          setLoading(false);
-        }
-      })
-      .catch((err) => {
-        console.error("Map markers loading error:", err);
-        if (isMounted) {
-          setMarkers([]);
-          setSelected(null);
-          setLoading(false);
-        }
+    const map = new maplibregl.Map({
+      container: mapContainer.current,
+      style: GLOBAL_ENGLISH_STYLE,
+      center: [location.lng, location.lat],
+      zoom: 3,
+    });
+
+    mapRef.current = map;
+    map.addControl(new maplibregl.NavigationControl(), 'bottom-right');
+
+    map.on('load', () => map.resize());
+
+    map.on('click', (e) => {
+      const loc = getLocationFromCoords(e.lngLat.lat, e.lngLat.lng);
+      onLocationChange(loc);
+    });
+
+    const resizeObserver = new ResizeObserver(() => map.resize());
+    if (mapContainer.current) resizeObserver.observe(mapContainer.current);
+
+    return () => {
+      resizeObserver.disconnect();
+      markersRef.current.forEach((m) => m.remove());
+      markersRef.current = [];
+      map.remove();
+      mapRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!mapRef.current) return;
+    mapRef.current.flyTo({
+      center: [location.lng, location.lat],
+      zoom: 10,
+      duration: 2000,
+    });
+  }, [location.lat, location.lng]);
+
+  useEffect(() => {
+    if (!product || !mapRef.current) return;
+
+    let isMounted = true;
+    getMapMarkers(product, location).then((newMarkers) => {
+      if (!isMounted || !mapRef.current) return;
+
+      markersRef.current.forEach((m) => m.remove());
+      markersRef.current = [];
+
+      newMarkers.forEach((marker) => {
+        const el = document.createElement('div');
+        el.style.backgroundColor = markerColor(marker.type);
+        el.style.width = '20px';
+        el.style.height = '20px';
+        el.style.borderRadius = '50%';
+        el.style.border = '2px solid white';
+        el.style.cursor = 'pointer';
+
+        const m = new maplibregl.Marker(el)
+          .setLngLat([marker.lng, marker.lat])
+          .addTo(mapRef.current!);
+
+        el.addEventListener('click', (e) => {
+          e.stopPropagation();
+          onMarkerSelect(marker);
+        });
+
+        markersRef.current.push(m);
       });
+    });
 
     return () => {
       isMounted = false;
     };
-  }, [product, location]);
+  }, [location, product, onMarkerSelect]);
 
-  const handleSelectMarker = (marker: MapMarker) => {
-    setSelected(marker);
-    if (onMarkerSelect) {
-      onMarkerSelect(marker);
+  const handleSearch = useCallback((query: string) => {
+    setSearchQuery(query);
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+
+    if (!query.trim()) {
+      setSearchResults([]);
+      setShowResults(false);
+      return;
+    }
+
+    const localResults = searchLocationsLocal(query);
+    setSearchResults(localResults);
+    setShowResults(true);
+
+    setSearching(true);
+    searchTimerRef.current = setTimeout(async () => {
+      const results = await searchLocations(query);
+      setSearchResults(results);
+      setSearching(false);
+    }, 300);
+  }, []);
+
+  const handleSelectResult = (result: GeoSearchResult) => {
+    const loc: LocationInfo = {
+      country: result.country,
+      countryCode: '',
+      city: result.city || result.country,
+      region: result.country,
+      lat: result.lat,
+      lng: result.lng,
+    };
+    onLocationChange(loc);
+    setSearchQuery(result.placeName);
+    setShowResults(false);
+
+    if (mapRef.current) {
+      mapRef.current.flyTo({
+        center: [result.lng, result.lat],
+        zoom: result.city ? 11 : 5,
+        duration: 2000,
+      });
     }
   };
-
-  const getTypeIcon = (type: MapMarker['type']) => {
-    switch (type) {
-      case 'wholesale':
-        return <Building2 className="w-4 h-4 text-blue-400" />;
-      case 'production':
-        return <Factory className="w-4 h-4 text-amber-400" />;
-      default:
-        return <Store className="w-4 h-4 text-emerald-400" />;
-    }
-  };
-
-  if (loading) {
-    return (
-      <div className="w-full h-[500px] bg-slate-900 rounded-2xl border border-slate-800 flex flex-col items-center justify-center text-slate-400 gap-3">
-        <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
-        <p className="text-sm font-medium">Locating physical stores and suppliers...</p>
-      </div>
-    );
-  }
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 h-full min-h-[500px]">
-      {/* Stores List Panel */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 overflow-y-auto space-y-3 max-h-[500px]">
-        <div className="flex items-center justify-between pb-2 border-b border-slate-800">
-          <h3 className="font-semibold text-slate-200 text-sm flex items-center gap-2">
-            <MapPin className="w-4 h-4 text-blue-500" />
-            Nearby Stores ({markers.length})
-          </h3>
-          <span className="text-xs text-slate-400">{location.city || location.country}</span>
-        </div>
-
-        {markers.length === 0 ? (
-          <p className="text-xs text-slate-500 text-center py-8">
-            No physical stores found in this location.
-          </p>
-        ) : (
-          markers.map((marker) => {
-            const isSelected = selected?.id === marker.id;
-            return (
-              <div
-                key={marker.id}
-                onClick={() => handleSelectMarker(marker)}
-                className={`p-3 rounded-xl border cursor-pointer transition-all ${
-                  isSelected
-                    ? 'bg-blue-500/10 border-blue-500 text-slate-100'
-                    : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
-                }`}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    {getTypeIcon(marker.type)}
-                    <span className="font-medium text-sm line-clamp-1">{marker.name}</span>
-                  </div>
-                  {marker.verified && (
-                    <ShieldCheck className="w-4 h-4 text-blue-400 shrink-0" />
-                  )}
-                </div>
-
-                <p className="text-xs text-slate-500 mt-1 line-clamp-1">{marker.address}</p>
-
-                <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-800/50 text-xs">
-                  <span className="text-amber-400 font-medium">★ {marker.rating}</span>
-                  <span className="text-slate-400">
-                    Bulk: <strong className="text-emerald-400">${marker.bulkPrice}</strong>
-                  </span>
-                </div>
-              </div>
-            );
-          })
-        )}
-      </div>
-
-      {/* Simulated Map / Selection Details View */}
-      <div className="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-2xl p-6 flex flex-col justify-between relative overflow-hidden min-h-[300px]">
-        {/* Background Grid Accent */}
-        <div className="absolute inset-0 bg-[linear-gradient(to_right,#1e293b_1px,transparent_1px),linear-gradient(to_bottom,#1e293b_1px,transparent_1px)] bg-[size:2rem_2rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_50%,#000_70%,transparent_100%)] opacity-30 pointer-events-none" />
-
-        <div className="relative z-10 flex justify-between items-start">
-          <div>
-            <span className="text-xs font-semibold text-blue-400 uppercase tracking-wider">
-              Selected Supplier Node
-            </span>
-            <h2 className="text-xl font-bold text-slate-100 mt-1">
-              {selected ? selected.name : 'Select a store'}
-            </h2>
-            <p className="text-xs text-slate-400 mt-1 flex items-center gap-1">
-              <MapPin className="w-3.5 h-3.5" />
-              {selected ? selected.address : 'No store selected'}
-            </p>
+    <div className="relative w-full h-full min-h-[500px] overflow-hidden rounded-2xl border border-[var(--tp-border)]">
+      <div className="absolute top-4 left-4 right-4 z-20 flex items-center gap-3">
+        <div className="relative flex-1 max-w-md">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--tp-text-muted)]" size={18} />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => handleSearch(e.target.value)}
+              onFocus={() => searchResults.length > 0 && setShowResults(true)}
+              placeholder="Search any global city or country..."
+              className="w-full pl-10 pr-10 py-3 rounded-xl bg-[var(--tp-surface)] border border-[var(--tp-border)] text-[var(--tp-text)] text-sm shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            {searching && <Loader2 size={16} className="absolute right-3 top-3.5 text-blue-500 animate-spin" />}
           </div>
-          {selected && (
-            <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-800 text-slate-300 capitalize border border-slate-700">
-              {selected.type}
-            </span>
+
+          {showResults && searchResults.length > 0 && (
+            <div className="absolute top-full mt-2 w-full rounded-xl bg-[var(--tp-surface)] border border-[var(--tp-border)] shadow-xl max-h-60 overflow-y-auto">
+              {searchResults.map((result) => (
+                <button
+                  key={result.id}
+                  onClick={() => handleSelectResult(result)}
+                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-blue-500/10 text-left border-b border-[var(--tp-border)] last:border-0"
+                >
+                  <MapPin size={16} className="text-blue-500 shrink-0" />
+                  <div>
+                    <div className="text-sm font-medium text-[var(--tp-text)]">{result.label}</div>
+                    <div className="text-xs text-[var(--tp-text-muted)]">{result.placeName}</div>
+                  </div>
+                </button>
+              ))}
+            </div>
           )}
         </div>
-
-        {selected ? (
-          <div className="relative z-10 grid grid-cols-2 md:grid-cols-4 gap-4 mt-6 pt-6 border-t border-slate-800 bg-slate-950/80 p-4 rounded-xl">
-            <div>
-              <span className="text-xs text-slate-500">Retail Unit Price</span>
-              <p className="text-base font-bold text-slate-200">${selected.originalPrice}</p>
-            </div>
-            <div>
-              <span className="text-xs text-slate-500">Wholesale Price</span>
-              <p className="text-base font-bold text-emerald-400">${selected.bulkPrice}</p>
-            </div>
-            <div>
-              <span className="text-xs text-slate-500">Store Rating</span>
-              <p className="text-base font-bold text-amber-400">{selected.rating} / 5.0</p>
-            </div>
-            <div>
-              <span className="text-xs text-slate-500">Popularity</span>
-              <p className="text-base font-bold text-blue-400">{selected.popularity}%</p>
-            </div>
-          </div>
-        ) : (
-          <div className="relative z-10 text-center text-slate-500 my-auto">
-            Select a store from the list to view pricing details
-          </div>
-        )}
       </div>
+
+      <div ref={mapContainer} className="w-full h-full min-h-[500px]" />
     </div>
   );
 }
