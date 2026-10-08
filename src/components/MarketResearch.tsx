@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { getMarketAnalytics } from './lib/dataEngine';
-import { MarketAnalytics, LocationInfo } from './lib/types';
+import { getMarketAnalytics } from '../lib/dataEngine';
+import { MarketAnalytics, LocationInfo } from '../lib/types';
 import { TrendingUp, DollarSign, BarChart2, AlertCircle, Loader2 } from 'lucide-react';
 
 interface MarketResearchProps {
