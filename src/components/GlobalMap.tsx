@@ -2,8 +2,8 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { Search, MapPin, Loader2 } from 'lucide-react';
-import { searchLocations, searchLocationsLocal, getMapMarkers, getLocationFromCoords, GeoSearchResult } from '@/lib/dataEngine';
-import { MapMarker, LocationInfo } from '@/lib/types';
+import { searchLocations, searchLocationsLocal, getMapMarkers, getLocationFromCoords, GeoSearchResult } from '../lib/dataEngine';
+import { MapMarker, LocationInfo } from '../lib/types';
 
 interface GlobalMapProps {
   location: LocationInfo;
@@ -192,7 +192,7 @@ export default function GlobalMap({ location, product, onLocationChange, onMarke
           </div>
 
           {showResults && searchResults.length > 0 && (
-            <div className="absolute top-full mt-2 w-full rounded-xl bg-[var(--tp-surface)] border border-[var(--tp-border)] shadow-xl max-h-60 overflow-y-auto">
+            <div className="absolute top-full mt-2 w-full rounded-xl bg-[var(--tp-surface)] border border-[var(--tp-border)] shadow-xl max-h-60 overflow-y-auto z-30">
               {searchResults.map((result) => (
                 <button
                   key={result.id}
