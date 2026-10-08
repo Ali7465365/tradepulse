@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import * as maplibregl from 'maplibre-gl';
+import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import MaplibreWorker from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker';
-
-// Fix worker for Vite / Bolt — must be set before any map is created
-(maplibregl as any).workerClass = MaplibreWorker;
 import { Search, MapPin, Navigation, X, Layers, ZoomIn, ZoomOut, Globe, Loader2 } from 'lucide-react';
 import { useTheme } from '@/context/ThemeContext';
 import { searchLocations, searchLocationsLocal, getMapMarkers, getLocationFromCoords, GeoSearchResult } from '@/lib/dataEngine';
 import { MapMarker, LocationInfo } from '@/lib/types';
+
+// Fix worker for Vite / Bolt — must run before any map is created
+maplibregl.workerClass = MaplibreWorker;
 
 interface GlobalMapProps {
   location: LocationInfo;
@@ -18,14 +18,18 @@ interface GlobalMapProps {
   isPro: boolean;
 }
 
+// OpenFreeMap — free, no API key
 const DARK_STYLE = 'https://tiles.openfreemap.org/styles/dark';
 const LIGHT_STYLE = 'https://tiles.openfreemap.org/styles/positron';
 
 function markerColor(type: MapMarker['type']): string {
   switch (type) {
-    case 'store': return '#3b82f6';
-    case 'wholesale': return '#f59e0b';
-    case 'production': return '#10b981';
+    case 'store':
+      return '#3b82f6';
+    case 'wholesale':
+      return '#f59e0b';
+    case 'production':
+      return '#10b981';
   }
 }
 
@@ -45,8 +49,8 @@ export default function GlobalMap({ location, product, onLocationChange, onMarke
   const [bearing, setBearing] = useState(0);
   const [mapLoaded, setMapLoaded] = useState(false);
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isFirstTheme = useRef(true);
 
-  // Force all map labels to English by overriding text-field on every symbol layer
   const forceEnglishLabels = useCallback((map: maplibregl.Map) => {
     const style = map.getStyle();
     if (!style || !style.layers) return;
@@ -69,7 +73,7 @@ export default function GlobalMap({ location, product, onLocationChange, onMarke
     }
   }, []);
 
-  // Initialize map
+  // Initialize map (only once)
   useEffect(() => {
     if (!mapContainer.current || mapRef.current) return;
 
@@ -98,9 +102,15 @@ export default function GlobalMap({ location, product, onLocationChange, onMarke
       map.resize();
     });
 
-    // Re-apply English labels whenever a new style finishes loading
     map.on('style.load', () => {
       forceEnglishLabels(map);
+      setMapLoaded(true);
+      map.resize();
+    });
+
+    map.on('error', (e) => {
+      console.error('MapLibre error:', e);
+      setMapLoaded(true);
     });
 
     map.on('move', () => {
@@ -114,7 +124,6 @@ export default function GlobalMap({ location, product, onLocationChange, onMarke
       onLocationChange(loc);
     });
 
-    // ResizeObserver ensures the map canvas fills its container on any DOM/viewport change
     const resizeObserver = new ResizeObserver(() => {
       if (mapRef.current) mapRef.current.resize();
     });
@@ -132,17 +141,16 @@ export default function GlobalMap({ location, product, onLocationChange, onMarke
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Update style when theme changes
+  // Update style when theme changes (skip first run)
   useEffect(() => {
     if (!mapRef.current) return;
-    mapRef.current.setStyle(theme === 'dark' ? DARK_STYLE : LIGHT_STYLE);
+    if (isFirstTheme.current) {
+      isFirstTheme.current = false;
+      return;
+    }
     setMapLoaded(false);
-    mapRef.current.once('load', () => {
-      setMapLoaded(true);
-      forceEnglishLabels(mapRef.current!);
-      mapRef.current!.resize();
-    });
-  }, [theme, forceEnglishLabels]);
+    mapRef.current.setStyle(theme === 'dark' ? DARK_STYLE : LIGHT_STYLE);
+  }, [theme]);
 
   // Fly to location
   useEffect(() => {
@@ -198,7 +206,6 @@ export default function GlobalMap({ location, product, onLocationChange, onMarke
     });
   }, [location, product, onMarkerSelect]);
 
-  // Debounced search — local results immediately, then Nominatim for worldwide coverage
   const handleSearch = useCallback((query: string) => {
     setSearchQuery(query);
     if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
@@ -209,12 +216,10 @@ export default function GlobalMap({ location, product, onLocationChange, onMarke
       return;
     }
 
-    // Show local hardcoded results instantly for responsiveness
     const localResults = searchLocationsLocal(query);
     setSearchResults(localResults);
     setShowResults(true);
 
-    // Then fetch worldwide results from Nominatim via searchLocations
     setSearching(true);
     searchTimerRef.current = setTimeout(async () => {
       const results = await searchLocations(query);
@@ -287,7 +292,11 @@ export default function GlobalMap({ location, product, onLocationChange, onMarke
                 <Loader2 size={16} className="text-blue-500 animate-spin" />
               ) : searchQuery ? (
                 <button
-                  onClick={() => { setSearchQuery(''); setShowResults(false); setSearchResults([]); }}
+                  onClick={() => {
+                    setSearchQuery('');
+                    setShowResults(false);
+                    setSearchResults([]);
+                  }}
                   className="text-[var(--tp-text-muted)] hover:text-[var(--tp-text)]"
                 >
                   <X size={16} />
@@ -322,7 +331,8 @@ export default function GlobalMap({ location, product, onLocationChange, onMarke
         <div className="hidden md:flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[var(--tp-surface)] border border-[var(--tp-border)] shadow-lg">
           <Globe size={16} className="text-blue-500" />
           <span className="text-sm font-medium text-[var(--tp-text)]">
-            {location.city ? `${location.city}, ` : ''}{location.country}
+            {location.city ? `${location.city}, ` : ''}
+            {location.country}
           </span>
         </div>
       </div>
@@ -411,7 +421,7 @@ export default function GlobalMap({ location, product, onLocationChange, onMarke
         </div>
       )}
 
-      {/* Map container — explicit height to prevent blank canvas */}
+      {/* Map container */}
       <div
         ref={mapContainer}
         className="w-full h-full"
