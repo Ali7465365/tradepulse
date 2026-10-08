@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import MarketResearch from './components/MarketResearch';
 import GlobalMap from './components/GlobalMap';
-import SellerSection from './components/SellerSection';
+import SellersSection from './components/SellersSection';
 import PricingPage from './components/PricingPage';
 import { getMapMarkers } from './lib/dataEngine';
 import { LocationInfo, MapMarker } from './lib/types';
@@ -122,7 +122,7 @@ export default function App() {
         )}
 
         {activeTab === 'sellers' && (
-          <SellerSection selectedMarker={selectedMarker} location={location} />
+          <SellersSection selectedMarker={selectedMarker} location={location} />
         )}
 
         {activeTab === 'pricing' && (
