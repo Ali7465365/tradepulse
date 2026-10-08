@@ -1,220 +1,116 @@
-import { useMemo } from 'react';
-import { TrendingUp, TrendingDown, Minus, Activity, DollarSign, Target, BarChart3, Gauge, Package, Import } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { getMarketAnalytics } from '@/lib/dataEngine';
-import { LocationInfo, MarketAnalytics } from '@/lib/types';
+import { MarketAnalytics, LocationInfo } from '@/lib/types';
+import { TrendingUp, DollarSign, BarChart2, AlertCircle, Loader2 } from 'lucide-react';
 
 interface MarketResearchProps {
   product: string;
   location: LocationInfo;
-  isPro: boolean;
 }
 
-export default function MarketResearch({ product, location, isPro }: MarketResearchProps) {
-  const analytics: MarketAnalytics = useMemo(
-    () => product ? getMarketAnalytics(product, location) : null as any,
-    [product, location]
-  );
+export default function MarketResearch({ product, location }: MarketResearchProps) {
+  const [analytics, setAnalytics] = useState<MarketAnalytics | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
 
-  if (!product) {
+  useEffect(() => {
+    let isMounted = true;
+    setLoading(true);
+
+    getMarketAnalytics(product, location).then((data) => {
+      if (isMounted) {
+        setAnalytics(data);
+        setLoading(false);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [product, location]);
+
+  if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center h-full p-12 text-center">
-        <div className="w-16 h-16 rounded-2xl bg-blue-500/10 flex items-center justify-center mb-4">
-          <BarChart3 className="text-blue-500" size={32} />
-        </div>
-        <h3 className="text-lg font-semibold text-[var(--tp-text)] mb-2">Market Research</h3>
-        <p className="text-sm text-[var(--tp-text-muted)] max-w-sm">
-          Search for a product above to see detailed market analytics for {location.city || location.country}.
-        </p>
+      <div className="flex flex-col items-center justify-center p-12 bg-[var(--tp-surface)] rounded-2xl border border-[var(--tp-border)] text-[var(--tp-text-muted)] gap-3">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+        <p className="text-sm font-medium">Fetching real-time international market research...</p>
       </div>
     );
   }
 
-  const demandColor = analytics.demandScore === 'High' ? 'text-emerald-500' : analytics.demandScore === 'Medium' ? 'text-amber-500' : 'text-red-500';
-  const demandBg = analytics.demandScore === 'High' ? 'bg-emerald-500' : analytics.demandScore === 'Medium' ? 'bg-amber-500' : 'bg-red-500';
-  const TrendIcon = analytics.trend === 'rising' ? TrendingUp : analytics.trend === 'declining' ? TrendingDown : Minus;
-  const trendColor = analytics.trend === 'rising' ? 'text-emerald-500' : analytics.trend === 'declining' ? 'text-red-500' : 'text-[var(--tp-text-muted)]';
-
-  const importColor = analytics.importNeed === 'High' ? 'text-red-500' : analytics.importNeed === 'Medium' ? 'text-amber-500' : analytics.importNeed === 'Low' ? 'text-blue-500' : 'text-emerald-500';
+  if (!analytics) return null;
 
   return (
-    <div className="h-full overflow-y-auto p-6 space-y-6 animate-fade-in">
-      {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <div>
-          <h2 className="text-2xl font-bold text-[var(--tp-text)]">{product}</h2>
-          <p className="text-sm text-[var(--tp-text-muted)] mt-1">
-            Market analysis for {location.city ? `${location.city}, ` : ''}{location.country}
-          </p>
-        </div>
-        <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[var(--tp-surface)] border border-[var(--tp-border)]">
-          <TrendIcon className={trendColor} size={20} />
-          <span className={`text-sm font-semibold capitalize ${trendColor}`}>{analytics.trend}</span>
-        </div>
-      </div>
-
-      {/* Main metrics grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {/* Demand Score */}
-        <div className="p-5 rounded-2xl bg-[var(--tp-surface)] border border-[var(--tp-border)]">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <div className="w-9 h-9 rounded-lg bg-blue-500/10 flex items-center justify-center">
-                <Activity className="text-blue-500" size={18} />
-              </div>
-              <span className="text-sm text-[var(--tp-text-muted)]">Market Demand</span>
-            </div>
-            <span className={`text-lg font-bold ${demandColor}`}>{analytics.demandScore}</span>
-          </div>
-          <div className="mt-3">
-            <div className="flex justify-between text-xs text-[var(--tp-text-muted)] mb-1">
-              <span>Score</span>
-              <span className="font-semibold text-[var(--tp-text)]">{analytics.demandPercent}%</span>
-            </div>
-            <div className="h-2 rounded-full bg-[var(--tp-border)] overflow-hidden">
-              <div className={`h-full ${demandBg} transition-all duration-700`} style={{ width: `${analytics.demandPercent}%` }} />
-            </div>
-          </div>
-        </div>
-
-        {/* Average Price */}
-        <div className="p-5 rounded-2xl bg-[var(--tp-surface)] border border-[var(--tp-border)]">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <div className="w-9 h-9 rounded-lg bg-emerald-500/10 flex items-center justify-center">
-                <DollarSign className="text-emerald-500" size={18} />
-              </div>
-              <span className="text-sm text-[var(--tp-text-muted)]">Avg Market Price</span>
-            </div>
-          </div>
-          <div className="mt-3">
-            <span className="text-3xl font-bold text-[var(--tp-text)]">${analytics.averagePrice}</span>
-            <span className="text-sm text-[var(--tp-text-muted)] ml-1">USD</span>
-          </div>
-        </div>
-
-        {/* Viability Score */}
-        <div className="p-5 rounded-2xl bg-[var(--tp-surface)] border border-[var(--tp-border)]">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <div className="w-9 h-9 rounded-lg bg-purple-500/10 flex items-center justify-center">
-                <Target className="text-purple-500" size={18} />
-              </div>
-              <span className="text-sm text-[var(--tp-text-muted)]">Viability Score</span>
-            </div>
-          </div>
-          <div className="mt-3">
-            <div className="flex justify-between text-xs text-[var(--tp-text-muted)] mb-1">
-              <span>Success Probability</span>
-              <span className="font-semibold text-[var(--tp-text)]">{analytics.viabilityPercent}%</span>
-            </div>
-            <div className="h-2 rounded-full bg-[var(--tp-border)] overflow-hidden">
-              <div
-                className="h-full bg-gradient-to-r from-blue-500 to-purple-500 transition-all duration-700"
-                style={{ width: `${analytics.viabilityPercent}%` }}
-              />
-            </div>
-            <div className="mt-2 text-xs text-[var(--tp-text-muted)]">
-              Score: {analytics.viabilityScore}/10
-            </div>
-          </div>
-        </div>
-
-        {/* Required Quantity / Deficit */}
-        <div className="p-5 rounded-2xl bg-[var(--tp-surface)] border border-[var(--tp-border)]">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <div className="w-9 h-9 rounded-lg bg-amber-500/10 flex items-center justify-center">
-                <Package className="text-amber-500" size={18} />
-              </div>
-              <span className="text-sm text-[var(--tp-text-muted)]">Quantity & Deficit</span>
-            </div>
-          </div>
-          <div className="mt-3 space-y-2">
-            <div className="flex justify-between text-sm">
-              <span className="text-[var(--tp-text-muted)]">Required:</span>
-              <span className="font-semibold text-[var(--tp-text)]">{analytics.requiredQuantity.toLocaleString()} units</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-[var(--tp-text-muted)]">Deficit:</span>
-              <span className="font-semibold text-amber-500">{analytics.deficit.toLocaleString()} units</span>
-            </div>
-            <div className="h-1.5 rounded-full bg-[var(--tp-border)] overflow-hidden">
-              <div className="h-full bg-amber-500 transition-all duration-700" style={{ width: `${(analytics.deficit / analytics.requiredQuantity) * 100}%` }} />
-            </div>
-          </div>
-        </div>
-
-        {/* Popularity */}
-        <div className="p-5 rounded-2xl bg-[var(--tp-surface)] border border-[var(--tp-border)]">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <div className="w-9 h-9 rounded-lg bg-blue-500/10 flex items-center justify-center">
-                <Gauge className="text-blue-500" size={18} />
-              </div>
-              <span className="text-sm text-[var(--tp-text-muted)]">Local Popularity</span>
-            </div>
-          </div>
-          <div className="mt-3">
-            <div className="flex justify-between text-xs text-[var(--tp-text-muted)] mb-1">
-              <span>Consumer Interest</span>
-              <span className="font-semibold text-[var(--tp-text)]">{analytics.popularity}%</span>
-            </div>
-            <div className="h-2 rounded-full bg-[var(--tp-border)] overflow-hidden">
-              <div className="h-full bg-blue-500 transition-all duration-700" style={{ width: `${analytics.popularity}%` }} />
-            </div>
-          </div>
-        </div>
-
-        {/* Import Need */}
-        <div className="p-5 rounded-2xl bg-[var(--tp-surface)] border border-[var(--tp-border)]">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <div className="w-9 h-9 rounded-lg bg-indigo-500/10 flex items-center justify-center">
-                <Import className="text-indigo-500" size={18} />
-              </div>
-              <span className="text-sm text-[var(--tp-text-muted)]">Import Need</span>
-            </div>
-            <span className={`text-lg font-bold ${importColor}`}>{analytics.importNeed}</span>
-          </div>
-          <div className="mt-3">
-            <p className="text-xs text-[var(--tp-text-muted)]">
-              {analytics.importNeed === 'High' && 'Local supply insufficient — strong import opportunity'}
-              {analytics.importNeed === 'Medium' && 'Moderate supply gap — balanced import potential'}
-              {analytics.importNeed === 'Low' && 'Market mostly self-supplied — niche import opportunity'}
-              {analytics.importNeed === 'None' && 'Market fully supplied — focus on differentiation'}
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Market Overview */}
+    <div className="space-y-6">
+      {/* Metric Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="p-5 rounded-2xl bg-[var(--tp-surface)] border border-[var(--tp-border)]">
-          <div className="text-xs text-[var(--tp-text-muted)] mb-1">Market Size</div>
-          <div className="text-2xl font-bold text-[var(--tp-text)]">{analytics.marketSize}</div>
-        </div>
-        <div className="p-5 rounded-2xl bg-[var(--tp-surface)] border border-[var(--tp-border)]">
-          <div className="text-xs text-[var(--tp-text-muted)] mb-1">Active Competitors</div>
-          <div className="text-2xl font-bold text-[var(--tp-text)]">~{analytics.competitorCount}</div>
-        </div>
-        <div className="p-5 rounded-2xl bg-gradient-to-br from-blue-500/10 to-purple-500/10 border border-blue-500/20">
-          <div className="text-xs text-[var(--tp-text-muted)] mb-1">Opportunity Rating</div>
-          <div className={`text-2xl font-bold ${analytics.viabilityPercent > 75 ? 'text-emerald-500' : analytics.viabilityPercent > 60 ? 'text-amber-500' : 'text-red-500'}`}>
-            {analytics.viabilityPercent > 75 ? 'Excellent' : analytics.viabilityPercent > 60 ? 'Good' : 'Risky'}
+          <div className="flex items-center justify-between text-[var(--tp-text-muted)] mb-2">
+            <span className="text-xs font-semibold uppercase tracking-wider">Demand Index</span>
+            <TrendingUp size={18} className="text-blue-500" />
           </div>
+          <div className="text-2xl font-bold text-[var(--tp-text)]">
+            {analytics.demandScore} ({analytics.demandPercent}%)
+          </div>
+          <div className="mt-2 w-full bg-slate-700/30 rounded-full h-1.5">
+            <div
+              className="bg-blue-500 h-1.5 rounded-full"
+              style={{ width: `${analytics.demandPercent}%` }}
+            />
+          </div>
+        </div>
+
+        <div className="p-5 rounded-2xl bg-[var(--tp-surface)] border border-[var(--tp-border)]">
+          <div className="flex items-center justify-between text-[var(--tp-text-muted)] mb-2">
+            <span className="text-xs font-semibold uppercase tracking-wider">Est. Market Size</span>
+            <BarChart2 size={18} className="text-emerald-500" />
+          </div>
+          <div className="text-2xl font-bold text-[var(--tp-text)]">
+            {analytics.marketSize}
+          </div>
+          <p className="text-xs text-[var(--tp-text-muted)] mt-1">
+            Based on official UN Comtrade import volumes
+          </p>
+        </div>
+
+        <div className="p-5 rounded-2xl bg-[var(--tp-surface)] border border-[var(--tp-border)]">
+          <div className="flex items-center justify-between text-[var(--tp-text-muted)] mb-2">
+            <span className="text-xs font-semibold uppercase tracking-wider">Avg Unit Price</span>
+            <DollarSign size={18} className="text-amber-500" />
+          </div>
+          <div className="text-2xl font-bold text-[var(--tp-text)]">
+            ${analytics.averagePrice.toFixed(2)}
+          </div>
+          <p className="text-xs text-[var(--tp-text-muted)] mt-1">
+            Global market benchmark ({analytics.currency})
+          </p>
         </div>
       </div>
 
-      {!isPro && (
-        <div className="p-4 rounded-xl bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/20 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Gauge className="text-amber-500" size={20} />
-            <p className="text-sm text-[var(--tp-text)]">
-              <span className="font-semibold">PRO:</span> Unlock deep trend analysis, competitor pricing breakdowns, and monthly forecast data.
-            </p>
+      {/* Detail Breakdown */}
+      <div className="p-6 rounded-2xl bg-[var(--tp-surface)] border border-[var(--tp-border)] space-y-4">
+        <h3 className="text-base font-semibold text-[var(--tp-text)] flex items-center gap-2">
+          <AlertCircle size={18} className="text-blue-500" />
+          Supply Deficit & Trade Opportunity
+        </h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-2">
+          <div>
+            <span className="text-xs text-[var(--tp-text-muted)]">Target Location</span>
+            <p className="text-sm font-semibold text-[var(--tp-text)]">{location.city || location.country}</p>
+          </div>
+          <div>
+            <span className="text-xs text-[var(--tp-text-muted)]">Estimated Deficit</span>
+            <p className="text-sm font-semibold text-amber-500">{analytics.deficit.toLocaleString()} units</p>
+          </div>
+          <div>
+            <span className="text-xs text-[var(--tp-text-muted)]">Import Need</span>
+            <p className="text-sm font-semibold text-[var(--tp-text)]">{analytics.importNeed}</p>
+          </div>
+          <div>
+            <span className="text-xs text-[var(--tp-text-muted)]">Market Trend</span>
+            <p className="text-sm font-semibold text-emerald-500 capitalize">{analytics.trend}</p>
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }
