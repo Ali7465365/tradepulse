@@ -1,214 +1,158 @@
-import { useState, useEffect } from 'react';
-import GlobalMap from './components/GlobalMap';
-import MarketResearch from './components/MarketResearch';
-import SellersSection from './components/SellersSection';
-import PricingPage from './components/PricingPage';
-import { getMarketAnalytics } from './lib/dataEngine';
-import { LocationInfo, MapMarker, MarketAnalytics } from './lib/types';
-import { Globe, BarChart2, Store, Bot, Code, Search, Gift, Zap, Moon } from 'lucide-react';
+import { MarketAnalytics, MapMarker, LocationInfo } from './types';
 
-export default function App() {
-  const [activeTab, setActiveTab] = useState<'map' | 'research' | 'sellers' | 'ai' | 'api'>('map');
-  const [product, setProduct] = useState('medicine');
-  const [location, setLocation] = useState<LocationInfo>({
+const COUNTRIES: { code: string; name: string; lat: number; lng: number }[] = [
+  { code: 'CN', name: 'China', lat: 35.8617, lng: 104.1954 },
+  { code: 'US', name: 'United States', lat: 37.0902, lng: -95.7129 },
+  { code: 'IN', name: 'India', lat: 20.5937, lng: 78.9629 },
+  { code: 'DE', name: 'Germany', lat: 51.1657, lng: 10.4515 },
+  { code: 'JP', name: 'Japan', lat: 36.2048, lng: 138.2529 },
+  { code: 'GB', name: 'United Kingdom', lat: 55.3781, lng: -3.4360 },
+  { code: 'PK', name: 'Pakistan', lat: 30.3753, lng: 69.3451 },
+  { code: 'IT', name: 'Italy', lat: 41.8719, lng: 12.5674 },
+];
+
+const CITIES: { name: string; country: string; countryCode: string; lat: number; lng: number }[] = [
+  { name: 'Shanghai', country: 'China', countryCode: 'CN', lat: 31.2304, lng: 121.4737 },
+  { name: 'Karachi', country: 'Pakistan', countryCode: 'PK', lat: 24.8607, lng: 67.0011 },
+  { name: 'Provincia di Imperia', country: 'Italy', countryCode: 'IT', lat: 43.8861, lng: 7.9275 },
+  { name: 'New York', country: 'United States', countryCode: 'US', lat: 40.7128, lng: -74.0060 },
+  { name: 'Tokyo', country: 'Japan', countryCode: 'JP', lat: 35.6762, lng: 139.6503 },
+];
+
+export interface GeoSearchResult {
+  id: string;
+  label: string;
+  placeName: string;
+  lat: number;
+  lng: number;
+  country: string;
+  city: string;
+}
+
+export function searchLocationsLocal(query: string): GeoSearchResult[] {
+  if (!query.trim()) return [];
+  const q = query.toLowerCase();
+
+  const cityMatches = CITIES.filter(
+    (c) => c.name.toLowerCase().includes(q) || c.country.toLowerCase().includes(q)
+  ).map((c) => ({
+    id: `city-${c.name}-${c.countryCode}`,
+    label: c.name,
+    placeName: `${c.name}, ${c.country}`,
+    lat: c.lat,
+    lng: c.lng,
+    country: c.country,
+    city: c.name,
+  }));
+
+  return cityMatches.slice(0, 10);
+}
+
+export async function searchLocations(query: string): Promise<GeoSearchResult[]> {
+  if (!query.trim()) return [];
+
+  try {
+    const targetUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=10&addressdetails=1&accept-language=en`;
+    const res = await fetch(targetUrl);
+    if (!res.ok) throw new Error('Geocoding direct fetch failed');
+    const data = await res.json();
+
+    return data.map((item: any, idx: number) => {
+      const addr = item.address || {};
+      const city = addr.city || addr.town || addr.village || addr.county || '';
+      const country = addr.country || '';
+      const label = city || country || item.display_name?.split(',')[0] || 'Unknown';
+      
+      return {
+        id: `nominatim-${item.osm_id || idx}`,
+        label,
+        placeName: item.display_name?.split(',').slice(0, 3).join(',').trim() || label,
+        lat: parseFloat(item.lat),
+        lng: parseFloat(item.lon),
+        country,
+        city,
+      };
+    });
+  } catch {
+    return searchLocationsLocal(query);
+  }
+}
+
+export function getLocationFromCoords(lat: number, lng: number): LocationInfo {
+  return {
     country: 'Italy',
     countryCode: 'IT',
     city: 'Provincia di Imperia',
     region: 'Liguria',
-    lat: 43.8861,
-    lng: 7.9275,
-  });
+    lat,
+    lng,
+  };
+}
 
-  const [selectedMarker, setSelectedMarker] = useState<MapMarker | null>(null);
-  const [analytics, setAnalytics] = useState<MarketAnalytics | null>(null);
-  const [analyticsLoading, setAnalyticsLoading] = useState(true);
-  const [isPro, setIsPro] = useState(false);
-  const [showPricing, setShowPricing] = useState(false);
+export async function getMarketAnalytics(product: string, location: LocationInfo): Promise<MarketAnalytics> {
+  const pLen = (product || 'general').length;
+  const baseDemand = 50 + (pLen * 3) % 40;
+  
+  return {
+    demandScore: baseDemand > 75 ? 'High' : baseDemand > 55 ? 'Medium' : 'Low',
+    demandPercent: 67,
+    averagePrice: 133.19,
+    currency: 'USD',
+    requiredQuantity: 27756,
+    deficit: 12388,
+    viabilityScore: 0.7,
+    viabilityPercent: 68,
+    popularity: 75,
+    importNeed: 'Medium',
+    trend: 'declining',
+    marketSize: '$44.7B',
+    competitorCount: 14,
+  };
+}
 
-  useEffect(() => {
-    let isMounted = true;
-    setAnalyticsLoading(true);
-
-    getMarketAnalytics(product, location).then((data) => {
-      if (isMounted) {
-        setAnalytics(data);
-        setAnalyticsLoading(false);
-      }
-    });
-
-    return () => {
-      isMounted = false;
-    };
-  }, [product, location]);
-
-  return (
-    <div className="min-h-screen bg-[#0f172a] text-slate-100 flex flex-col font-sans">
-      {/* Top Header */}
-      <header className="px-6 py-3 border-b border-slate-800 flex items-center justify-between gap-4 bg-[#0f172a]">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-xl bg-blue-600 flex items-center justify-center font-bold text-white text-lg">
-            T
-          </div>
-          <div>
-            <h1 className="text-base font-bold text-white leading-tight">TradePulse</h1>
-            <p className="text-[11px] text-slate-400">Market Intelligence & Global Trade</p>
-          </div>
-        </div>
-
-        {/* Top Product Search */}
-        <div className="flex-1 max-w-xl relative">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-          <input
-            type="text"
-            value={product}
-            onChange={(e) => setProduct(e.target.value)}
-            placeholder="Search any product (e.g. Wireless Earbuds, Leather Bags)..."
-            className="w-full pl-10 pr-4 py-2 rounded-xl bg-slate-800/80 border border-slate-700/60 text-sm text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-
-        {/* Header Action Badges */}
-        <div className="flex items-center gap-2">
-          <span className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs font-medium">
-            <Zap size={13} /> Free
-          </span>
-          <button className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-medium hover:bg-amber-500/20">
-            <Gift size={13} /> Ad Rewards
-          </button>
-          <button
-            onClick={() => setShowPricing(true)}
-            className="flex items-center gap-1 px-3 py-1 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium transition-all"
-          >
-            <Zap size={13} /> {isPro ? 'Pro Active' : 'Upgrade'}
-          </button>
-          <button className="p-2 text-slate-400 hover:text-slate-200">
-            <Moon size={16} />
-          </button>
-        </div>
-      </header>
-
-      {/* Primary Navigation Tabs */}
-      <div className="px-6 border-b border-slate-800 bg-[#0f172a] flex items-center gap-2 text-sm pt-2">
-        <button
-          onClick={() => setActiveTab('map')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-t-lg border-b-2 font-medium transition-all ${
-            activeTab === 'map'
-              ? 'border-blue-500 text-blue-400 bg-blue-500/10'
-              : 'border-transparent text-slate-400 hover:text-slate-200'
-          }`}
-        >
-          <Globe size={16} /> Global Map
-        </button>
-
-        <button
-          onClick={() => setActiveTab('research')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-t-lg border-b-2 font-medium transition-all ${
-            activeTab === 'research'
-              ? 'border-blue-500 text-blue-400 bg-blue-500/10'
-              : 'border-transparent text-slate-400 hover:text-slate-200'
-          }`}
-        >
-          <BarChart2 size={16} /> Market Research
-        </button>
-
-        <button
-          onClick={() => setActiveTab('sellers')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-t-lg border-b-2 font-medium transition-all ${
-            activeTab === 'sellers'
-              ? 'border-blue-500 text-blue-400 bg-blue-500/10'
-              : 'border-transparent text-slate-400 hover:text-slate-200'
-          }`}
-        >
-          <Store size={16} /> Sellers & Production
-        </button>
-
-        <button
-          onClick={() => setActiveTab('ai')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-t-lg border-b-2 font-medium transition-all ${
-            activeTab === 'ai'
-              ? 'border-blue-500 text-blue-400 bg-blue-500/10'
-              : 'border-transparent text-slate-400 hover:text-slate-200'
-          }`}
-        >
-          <Bot size={16} /> AI Assistant
-        </button>
-
-        <button
-          onClick={() => setActiveTab('api')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-t-lg border-b-2 font-medium transition-all ${
-            activeTab === 'api'
-              ? 'border-blue-500 text-blue-400 bg-blue-500/10'
-              : 'border-transparent text-slate-400 hover:text-slate-200'
-          }`}
-        >
-          <Code size={16} /> Developer API
-        </button>
-      </div>
-
-      {/* Main View Area */}
-      <main className="flex-1 p-6">
-        {activeTab === 'map' && (
-          <div className="h-[calc(100vh-145px)] rounded-2xl overflow-hidden border border-slate-800">
-            <GlobalMap
-              location={location}
-              product={product}
-              onLocationChange={setLocation}
-              onMarkerSelect={setSelectedMarker}
-              isPro={isPro}
-            />
-          </div>
-        )}
-
-        {activeTab === 'research' && (
-          <MarketResearch
-            analytics={analytics}
-            loading={analyticsLoading}
-            product={product}
-            location={location}
-          />
-        )}
-
-        {activeTab === 'sellers' && (
-          <SellersSection
-            selectedMarker={selectedMarker}
-            location={location}
-            isPro={isPro}
-          />
-        )}
-
-        {activeTab === 'ai' && (
-          <div className="p-8 rounded-2xl bg-slate-900 border border-slate-800 text-center text-slate-400">
-            AI Assistant is active for product recommendations and supplier verification.
-          </div>
-        )}
-
-        {activeTab === 'api' && (
-          <div className="p-8 rounded-2xl bg-slate-900 border border-slate-800 text-center text-slate-400">
-            Developer API access key and endpoints documentation.
-          </div>
-        )}
-      </main>
-
-      {/* Subscription Overlay Modal */}
-      {showPricing && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="relative w-full max-w-4xl max-h-[90vh] overflow-y-auto bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl">
-            <button
-              onClick={() => setShowPricing(false)}
-              className="absolute top-4 right-4 text-slate-400 hover:text-white text-xs font-bold px-3 py-1 rounded-lg border border-slate-700"
-            >
-              ✕ Close
-            </button>
-            <PricingPage
-              isPro={isPro}
-              onUpgrade={() => {
-                setIsPro(true);
-                setShowPricing(false);
-              }}
-            />
-          </div>
-        </div>
-      )}
-    </div>
-  );
+export async function getMapMarkers(product: string, location: LocationInfo): Promise<MapMarker[]> {
+  return [
+    {
+      id: `fb-1-${location.city}`,
+      name: `Pacific Distributors - ${product}`,
+      type: 'production',
+      lat: location.lat + 0.005,
+      lng: location.lng + 0.005,
+      address: `48 Trade St, ${location.city || 'Provincia di Imperia'}`,
+      rating: 4.4,
+      originalPrice: 125.64,
+      bulkPrice: 56.83,
+      verified: true,
+      popularity: 88,
+      proLocked: true,
+    },
+    {
+      id: `fb-2-${location.city}`,
+      name: `Prime Source Ltd. - ${product}`,
+      type: 'production',
+      lat: location.lat - 0.004,
+      lng: location.lng - 0.004,
+      address: `698 Trade St, ${location.city || 'Provincia di Imperia'}`,
+      rating: 4.2,
+      originalPrice: 18.47,
+      bulkPrice: 98.31,
+      verified: true,
+      popularity: 76,
+      proLocked: true,
+    },
+    {
+      id: `fb-3-${location.city}`,
+      name: `Worldwide Bazaar - ${product}`,
+      type: 'production',
+      lat: location.lat + 0.002,
+      lng: location.lng - 0.006,
+      address: `384 Trade St, ${location.city || 'Provincia di Imperia'}`,
+      rating: 4.0,
+      originalPrice: 296.19,
+      bulkPrice: 110.00,
+      verified: true,
+      popularity: 65,
+      proLocked: true,
+    }
+  ];
 }
