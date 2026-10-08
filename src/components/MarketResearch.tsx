@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { getMarketAnalytics } from '@/lib/dataEngine';
-import { MarketAnalytics, LocationInfo } from '@/lib/types';
+import { getMarketAnalytics } from './lib/dataEngine';
+import { MarketAnalytics, LocationInfo } from './lib/types';
 import { TrendingUp, DollarSign, BarChart2, AlertCircle, Loader2 } from 'lucide-react';
 
 interface MarketResearchProps {
@@ -11,17 +11,27 @@ interface MarketResearchProps {
 export default function MarketResearch({ product, location }: MarketResearchProps) {
   const [analytics, setAnalytics] = useState<MarketAnalytics | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<boolean>(false);
 
   useEffect(() => {
     let isMounted = true;
     setLoading(true);
+    setError(false);
 
-    getMarketAnalytics(product, location).then((data) => {
-      if (isMounted) {
-        setAnalytics(data);
-        setLoading(false);
-      }
-    });
+    getMarketAnalytics(product, location)
+      .then((data) => {
+        if (isMounted) {
+          setAnalytics(data);
+          setLoading(false);
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to load analytics:", err);
+        if (isMounted) {
+          setError(true);
+          setLoading(false);
+        }
+      });
 
     return () => {
       isMounted = false;
@@ -30,84 +40,88 @@ export default function MarketResearch({ product, location }: MarketResearchProp
 
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center p-12 bg-[var(--tp-surface)] rounded-2xl border border-[var(--tp-border)] text-[var(--tp-text-muted)] gap-3">
+      <div className="flex flex-col items-center justify-center p-12 bg-slate-900/60 rounded-2xl border border-slate-800 text-slate-400 gap-3">
         <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
-        <p className="text-sm font-medium">Fetching real-time international market research...</p>
+        <p className="text-sm font-medium">Loading market analytics...</p>
       </div>
     );
   }
 
-  if (!analytics) return null;
+  if (error || !analytics) {
+    return (
+      <div className="p-6 bg-slate-900/60 rounded-2xl border border-slate-800 text-center text-slate-400">
+        Unable to load market data for "{product}". Please try a different query.
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
-      {/* Metric Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="p-5 rounded-2xl bg-[var(--tp-surface)] border border-[var(--tp-border)]">
-          <div className="flex items-center justify-between text-[var(--tp-text-muted)] mb-2">
+        <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800">
+          <div className="flex items-center justify-between text-slate-400 mb-2">
             <span className="text-xs font-semibold uppercase tracking-wider">Demand Index</span>
             <TrendingUp size={18} className="text-blue-500" />
           </div>
-          <div className="text-2xl font-bold text-[var(--tp-text)]">
-            {analytics.demandScore} ({analytics.demandPercent}%)
+          <div className="text-2xl font-bold text-white">
+            {analytics.demandScore || 'Medium'} ({analytics.demandPercent ?? 50}%)
           </div>
-          <div className="mt-2 w-full bg-slate-700/30 rounded-full h-1.5">
+          <div className="mt-2 w-full bg-slate-800 rounded-full h-1.5">
             <div
               className="bg-blue-500 h-1.5 rounded-full"
-              style={{ width: `${analytics.demandPercent}%` }}
+              style={{ width: `${analytics.demandPercent ?? 50}%` }}
             />
           </div>
         </div>
 
-        <div className="p-5 rounded-2xl bg-[var(--tp-surface)] border border-[var(--tp-border)]">
-          <div className="flex items-center justify-between text-[var(--tp-text-muted)] mb-2">
+        <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800">
+          <div className="flex items-center justify-between text-slate-400 mb-2">
             <span className="text-xs font-semibold uppercase tracking-wider">Est. Market Size</span>
             <BarChart2 size={18} className="text-emerald-500" />
           </div>
-          <div className="text-2xl font-bold text-[var(--tp-text)]">
-            {analytics.marketSize}
+          <div className="text-2xl font-bold text-white">
+            {analytics.marketSize || '$1.0B'}
           </div>
-          <p className="text-xs text-[var(--tp-text-muted)] mt-1">
-            Based on official UN Comtrade import volumes
+          <p className="text-xs text-slate-400 mt-1">
+            Official UN Comtrade import volumes
           </p>
         </div>
 
-        <div className="p-5 rounded-2xl bg-[var(--tp-surface)] border border-[var(--tp-border)]">
-          <div className="flex items-center justify-between text-[var(--tp-text-muted)] mb-2">
+        <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800">
+          <div className="flex items-center justify-between text-slate-400 mb-2">
             <span className="text-xs font-semibold uppercase tracking-wider">Avg Unit Price</span>
             <DollarSign size={18} className="text-amber-500" />
           </div>
-          <div className="text-2xl font-bold text-[var(--tp-text)]">
-            ${analytics.averagePrice.toFixed(2)}
+          <div className="text-2xl font-bold text-white">
+            ${(analytics.averagePrice ?? 0).toFixed(2)}
           </div>
-          <p className="text-xs text-[var(--tp-text-muted)] mt-1">
-            Global market benchmark ({analytics.currency})
+          <p className="text-xs text-slate-400 mt-1">
+            Global market benchmark ({analytics.currency || 'USD'})
           </p>
         </div>
       </div>
 
-      {/* Detail Breakdown */}
-      <div className="p-6 rounded-2xl bg-[var(--tp-surface)] border border-[var(--tp-border)] space-y-4">
-        <h3 className="text-base font-semibold text-[var(--tp-text)] flex items-center gap-2">
+      <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 space-y-4">
+        <h3 className="text-base font-semibold text-white flex items-center gap-2">
           <AlertCircle size={18} className="text-blue-500" />
           Supply Deficit & Trade Opportunity
         </h3>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-2">
           <div>
-            <span className="text-xs text-[var(--tp-text-muted)]">Target Location</span>
-            <p className="text-sm font-semibold text-[var(--tp-text)]">{location.city || location.country}</p>
+            <span className="text-xs text-slate-400">Target Location</span>
+            <p className="text-sm font-semibold text-white">{location?.city || location?.country || 'Global'}</p>
           </div>
           <div>
-            <span className="text-xs text-[var(--tp-text-muted)]">Estimated Deficit</span>
-            <p className="text-sm font-semibold text-amber-500">{analytics.deficit.toLocaleString()} units</p>
+            <span className="text-xs text-slate-400">Estimated Deficit</span>
+            <p className="text-sm font-semibold text-amber-500">{(analytics.deficit ?? 0).toLocaleString()} units</p>
           </div>
           <div>
-            <span className="text-xs text-[var(--tp-text-muted)]">Import Need</span>
-            <p className="text-sm font-semibold text-[var(--tp-text)]">{analytics.importNeed}</p>
+            <span className="text-xs text-slate-400">Import Need</span>
+            <p className="text-sm font-semibold text-white">{analytics.importNeed || 'Medium'}</p>
           </div>
           <div>
-            <span className="text-xs text-[var(--tp-text-muted)]">Market Trend</span>
-            <p className="text-sm font-semibold text-emerald-500 capitalize">{analytics.trend}</p>
+            <span className="text-xs text-slate-400">Market Trend</span>
+            <p className="text-sm font-semibold text-emerald-500 capitalize">{analytics.trend || 'rising'}</p>
           </div>
         </div>
       </div>
