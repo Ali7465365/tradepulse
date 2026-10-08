@@ -1,251 +1,184 @@
-import { MarketAnalytics, MapMarker, LocationInfo } from './types';
+import { useEffect, useState } from 'react';
+import { getMapMarkers } from '../lib/dataEngine';
+import { MapMarker, LocationInfo } from '../lib/types';
+import { MapPin, Store, Building2, Factory, ShieldCheck, Loader2 } from 'lucide-react';
 
-const COUNTRIES: { code: string; name: string; lat: number; lng: number }[] = [
-  { code: 'CN', name: 'China', lat: 35.8617, lng: 104.1954 },
-  { code: 'US', name: 'United States', lat: 37.0902, lng: -95.7129 },
-  { code: 'IN', name: 'India', lat: 20.5937, lng: 78.9629 },
-  { code: 'DE', name: 'Germany', lat: 51.1657, lng: 10.4515 },
-  { code: 'JP', name: 'Japan', lat: 36.2048, lng: 138.2529 },
-  { code: 'GB', name: 'United Kingdom', lat: 55.3781, lng: -3.4360 },
-  { code: 'PK', name: 'Pakistan', lat: 30.3753, lng: 69.3451 },
-];
-
-const CITIES: { name: string; country: string; countryCode: string; lat: number; lng: number }[] = [
-  { name: 'Shanghai', country: 'China', countryCode: 'CN', lat: 31.2304, lng: 121.4737 },
-  { name: 'New York', country: 'United States', countryCode: 'US', lat: 40.7128, lng: -74.0060 },
-  { name: 'Karachi', country: 'Pakistan', countryCode: 'PK', lat: 24.8607, lng: 67.0011 },
-  { name: 'Lahore', country: 'Pakistan', countryCode: 'PK', lat: 31.5204, lng: 74.3587 },
-  { name: 'London', country: 'United Kingdom', countryCode: 'GB', lat: 51.5074, lng: -0.1278 },
-];
-
-export interface GeoSearchResult {
-  id: string;
-  label: string;
-  placeName: string;
-  lat: number;
-  lng: number;
-  country: string;
-  city: string;
+interface GlobalMapProps {
+  location: LocationInfo;
+  product: string;
+  onLocationChange?: (loc: LocationInfo) => void;
+  onMarkerSelect?: (marker: MapMarker | null) => void;
+  isPro?: boolean;
 }
 
-export function searchLocationsLocal(query: string): GeoSearchResult[] {
-  if (!query?.trim()) return [];
-  const q = query.toLowerCase();
+export default function GlobalMap({ location, product, onMarkerSelect }: GlobalMapProps) {
+  const [markers, setMarkers] = useState<MapMarker[]>([]);
+  const [selected, setSelected] = useState<MapMarker | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
 
-  const cityMatches = CITIES.filter(
-    (c) => c.name.toLowerCase().includes(q) || c.country.toLowerCase().includes(q)
-  ).map((c) => ({
-    id: `city-${c.name}-${c.countryCode}`,
-    label: c.name,
-    placeName: `${c.name}, ${c.country}`,
-    lat: c.lat,
-    lng: c.lng,
-    country: c.country,
-    city: c.name,
-  }));
+  useEffect(() => {
+    let isMounted = true;
+    setLoading(true);
 
-  const countryMatches = COUNTRIES.filter(
-    (c) => c.name.toLowerCase().includes(q)
-  ).map((c) => ({
-    id: `country-${c.code}`,
-    label: c.name,
-    placeName: c.name,
-    lat: c.lat,
-    lng: c.lng,
-    country: c.name,
-    city: '',
-  }));
+    getMapMarkers(product, location)
+      .then((data) => {
+        if (isMounted) {
+          const list = data || [];
+          setMarkers(list);
+          if (list.length > 0) {
+            setSelected(list[0]);
+            if (onMarkerSelect) onMarkerSelect(list[0]);
+          } else {
+            setSelected(null);
+            if (onMarkerSelect) onMarkerSelect(null);
+          }
+          setLoading(false);
+        }
+      })
+      .catch((err) => {
+        console.error("Map markers loading error:", err);
+        if (isMounted) {
+          setMarkers([]);
+          setSelected(null);
+          setLoading(false);
+        }
+      });
 
-  return [...cityMatches, ...countryMatches].slice(0, 10);
-}
+    return () => {
+      isMounted = false;
+    };
+  }, [product, location]);
 
-export async function searchLocations(query: string): Promise<GeoSearchResult[]> {
-  if (!query?.trim()) return [];
-
-  try {
-    const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=10&addressdetails=1&accept-language=en`;
-    const res = await fetch(url, { headers: { 'Accept-Language': 'en' } });
-    if (!res.ok) throw new Error('Geocoding failed');
-    const data = await res.json();
-
-    return data.map((item: any, idx: number) => {
-      const addr = item.address || {};
-      const city = addr.city || addr.town || addr.village || addr.county || '';
-      const country = addr.country || '';
-      const label = city || country || item.display_name?.split(',')[0] || 'Unknown';
-      
-      return {
-        id: `nominatim-${item.osm_id || idx}`,
-        label,
-        placeName: item.display_name?.split(',').slice(0, 3).join(',').trim() || label,
-        lat: parseFloat(item.lat),
-        lng: parseFloat(item.lon),
-        country,
-        city,
-      };
-    });
-  } catch {
-    return searchLocationsLocal(query);
-  }
-}
-
-export function getLocationFromCoords(lat: number, lng: number): LocationInfo {
-  let nearestCountry = COUNTRIES[0];
-  let minCountryDist = Infinity;
-  for (const c of COUNTRIES) {
-    const dist = Math.sqrt(Math.pow(c.lat - lat, 2) + Math.pow(c.lng - lng, 2));
-    if (dist < minCountryDist) {
-      minCountryDist = dist;
-      nearestCountry = c;
+  const handleSelectMarker = (marker: MapMarker) => {
+    setSelected(marker);
+    if (onMarkerSelect) {
+      onMarkerSelect(marker);
     }
-  }
-
-  let nearestCity = CITIES[0];
-  let minCityDist = Infinity;
-  for (const c of CITIES) {
-    if (c.countryCode !== nearestCountry.code) continue;
-    const dist = Math.sqrt(Math.pow(c.lat - lat, 2) + Math.pow(c.lng - lng, 2));
-    if (dist < minCityDist) {
-      minCityDist = dist;
-      nearestCity = c;
-    }
-  }
-
-  return {
-    country: nearestCountry.name,
-    countryCode: nearestCountry.code,
-    city: nearestCity.name,
-    region: nearestCountry.name,
-    lat,
-    lng,
   };
-}
 
-export async function getMarketAnalytics(product: string, location: LocationInfo): Promise<MarketAnalytics> {
-  try {
-    const tradeUrl = `https://comtradeapi.un.org/public/v1/preview/C/A/HS?reporterCode=0&period=2022`;
-    const response = await fetch(tradeUrl);
-    
-    if (response.ok) {
-      const data = await response.json();
-      if (data && data.data && data.data.length > 0) {
-        const primaryRecord = data.data[0];
-        const primaryVal = primaryRecord.primaryValue || 50000000;
-
-        return {
-          demandScore: primaryVal > 100000000 ? 'High' : 'Medium',
-          demandPercent: Math.min(95, Math.max(40, Math.floor((primaryVal / 200000000) * 100))),
-          averagePrice: 45.00,
-          currency: 'USD',
-          requiredQuantity: Math.floor(primaryVal / 1000),
-          deficit: Math.floor((primaryVal / 1000) * 0.25),
-          viabilityScore: 8.4,
-          viabilityPercent: 84,
-          popularity: 78,
-          importNeed: 'High',
-          trend: 'rising',
-          marketSize: `$${(primaryVal / 1000000000).toFixed(1)}B`,
-          competitorCount: 142,
-        };
-      }
+  const getTypeIcon = (type: MapMarker['type']) => {
+    switch (type) {
+      case 'wholesale':
+        return <Building2 className="w-4 h-4 text-blue-400" />;
+      case 'production':
+        return <Factory className="w-4 h-4 text-amber-400" />;
+      default:
+        return <Store className="w-4 h-4 text-emerald-400" />;
     }
-  } catch (e) {
-    console.warn('UN Comtrade API unavailable, providing domain fallback', e);
-  }
-
-  const pLength = (product || 'general').length;
-  const baseDemand = 50 + (pLength * 3) % 40;
-  
-  return {
-    demandScore: baseDemand > 75 ? 'High' : baseDemand > 55 ? 'Medium' : 'Low',
-    demandPercent: baseDemand,
-    averagePrice: Math.round((12 + (pLength * 4.5)) * 100) / 100,
-    currency: 'USD',
-    requiredQuantity: 12500,
-    deficit: 3100,
-    viabilityScore: 7.9,
-    viabilityPercent: 79,
-    popularity: 68,
-    importNeed: baseDemand > 65 ? 'High' : 'Medium',
-    trend: 'rising',
-    marketSize: `$${(1.2 + (pLength * 0.4)).toFixed(1)}B`,
-    competitorCount: 48,
   };
-}
 
-export async function getMapMarkers(product: string, location: LocationInfo): Promise<MapMarker[]> {
-  try {
-    const query = `
-      [out:json][timeout:10];
-      (
-        node["shop"](around:8000, ${location.lat}, ${location.lng});
-        node["craft"](around:8000, ${location.lat}, ${location.lng});
-        node["industrial"](around:8000, ${location.lat}, ${location.lng});
-      );
-      out body 12;
-    `;
-
-    const response = await fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`);
-    if (!response.ok) throw new Error('Overpass query failed');
-
-    const data = await response.json();
-    if (!data.elements || data.elements.length === 0) {
-      throw new Error('No physical stores returned');
-    }
-
-    return data.elements.slice(0, 10).map((el: any, index: number) => {
-      const realName = el.tags['name:en'] || el.tags.name || `${el.tags.shop || el.tags.craft || 'Trade'} Store`;
-      const type: MapMarker['type'] = index % 3 === 0 ? 'store' : index % 3 === 1 ? 'wholesale' : 'production';
-      
-      return {
-        id: `osm-node-${el.id}`,
-        name: realName,
-        type,
-        lat: el.lat,
-        lng: el.lon,
-        address: el.tags['addr:street']
-          ? `${el.tags['addr:housenumber'] || ''} ${el.tags['addr:street']}`.trim()
-          : `${location.city || location.country}`,
-        rating: Math.round((3.8 + (index % 12) * 0.1) * 10) / 10,
-        originalPrice: Math.round((15 + index * 3.5) * 100) / 100,
-        bulkPrice: Math.round((10 + index * 2.2) * 100) / 100,
-        verified: index % 2 === 0,
-        popularity: 50 + (index * 5),
-        proLocked: type !== 'store',
-      };
-    });
-  } catch (err) {
-    console.warn('Overpass API offline or empty, providing fallback stores', err);
-    
-    return [
-      {
-        id: `fb-1-${location.city || 'default'}`,
-        name: `${location.city || 'Global'} Central Market Hub`,
-        type: 'store',
-        lat: location.lat + 0.01,
-        lng: location.lng + 0.01,
-        address: `Commercial Zone, ${location.city || location.country}`,
-        rating: 4.5,
-        originalPrice: 20.00,
-        bulkPrice: 15.00,
-        verified: true,
-        popularity: 88,
-        proLocked: false,
-      },
-      {
-        id: `fb-2-${location.city || 'default'}`,
-        name: `${location.country} Wholesale Logistics`,
-        type: 'wholesale',
-        lat: location.lat - 0.015,
-        lng: location.lng - 0.012,
-        address: `Industrial Sector, ${location.city || location.country}`,
-        rating: 4.2,
-        originalPrice: 18.00,
-        bulkPrice: 12.50,
-        verified: true,
-        popularity: 76,
-        proLocked: true,
-      }
-    ];
+  if (loading) {
+    return (
+      <div className="w-full h-[500px] bg-slate-900 rounded-2xl border border-slate-800 flex flex-col items-center justify-center text-slate-400 gap-3">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+        <p className="text-sm font-medium">Locating physical stores and suppliers...</p>
+      </div>
+    );
   }
-}  
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 h-full min-h-[500px]">
+      {/* Stores List Panel */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 overflow-y-auto space-y-3 max-h-[500px]">
+        <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+          <h3 className="font-semibold text-slate-200 text-sm flex items-center gap-2">
+            <MapPin className="w-4 h-4 text-blue-500" />
+            Nearby Stores ({markers.length})
+          </h3>
+          <span className="text-xs text-slate-400">{location.city || location.country}</span>
+        </div>
+
+        {markers.length === 0 ? (
+          <p className="text-xs text-slate-500 text-center py-8">
+            No physical stores found in this location.
+          </p>
+        ) : (
+          markers.map((marker) => {
+            const isSelected = selected?.id === marker.id;
+            return (
+              <div
+                key={marker.id}
+                onClick={() => handleSelectMarker(marker)}
+                className={`p-3 rounded-xl border cursor-pointer transition-all ${
+                  isSelected
+                    ? 'bg-blue-500/10 border-blue-500 text-slate-100'
+                    : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
+                }`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    {getTypeIcon(marker.type)}
+                    <span className="font-medium text-sm line-clamp-1">{marker.name}</span>
+                  </div>
+                  {marker.verified && (
+                    <ShieldCheck className="w-4 h-4 text-blue-400 shrink-0" />
+                  )}
+                </div>
+
+                <p className="text-xs text-slate-500 mt-1 line-clamp-1">{marker.address}</p>
+
+                <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-800/50 text-xs">
+                  <span className="text-amber-400 font-medium">★ {marker.rating}</span>
+                  <span className="text-slate-400">
+                    Bulk: <strong className="text-emerald-400">${marker.bulkPrice}</strong>
+                  </span>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* Simulated Map / Selection Details View */}
+      <div className="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-2xl p-6 flex flex-col justify-between relative overflow-hidden min-h-[300px]">
+        {/* Background Grid Accent */}
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,#1e293b_1px,transparent_1px),linear-gradient(to_bottom,#1e293b_1px,transparent_1px)] bg-[size:2rem_2rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_50%,#000_70%,transparent_100%)] opacity-30 pointer-events-none" />
+
+        <div className="relative z-10 flex justify-between items-start">
+          <div>
+            <span className="text-xs font-semibold text-blue-400 uppercase tracking-wider">
+              Selected Supplier Node
+            </span>
+            <h2 className="text-xl font-bold text-slate-100 mt-1">
+              {selected ? selected.name : 'Select a store'}
+            </h2>
+            <p className="text-xs text-slate-400 mt-1 flex items-center gap-1">
+              <MapPin className="w-3.5 h-3.5" />
+              {selected ? selected.address : 'No store selected'}
+            </p>
+          </div>
+          {selected && (
+            <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-800 text-slate-300 capitalize border border-slate-700">
+              {selected.type}
+            </span>
+          )}
+        </div>
+
+        {selected ? (
+          <div className="relative z-10 grid grid-cols-2 md:grid-cols-4 gap-4 mt-6 pt-6 border-t border-slate-800 bg-slate-950/80 p-4 rounded-xl">
+            <div>
+              <span className="text-xs text-slate-500">Retail Unit Price</span>
+              <p className="text-base font-bold text-slate-200">${selected.originalPrice}</p>
+            </div>
+            <div>
+              <span className="text-xs text-slate-500">Wholesale Price</span>
+              <p className="text-base font-bold text-emerald-400">${selected.bulkPrice}</p>
+            </div>
+            <div>
+              <span className="text-xs text-slate-500">Store Rating</span>
+              <p className="text-base font-bold text-amber-400">{selected.rating} / 5.0</p>
+            </div>
+            <div>
+              <span className="text-xs text-slate-500">Popularity</span>
+              <p className="text-base font-bold text-blue-400">{selected.popularity}%</p>
+            </div>
+          </div>
+        ) : (
+          <div className="relative z-10 text-center text-slate-500 my-auto">
+            Select a store from the list to view pricing details
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
