@@ -187,9 +187,8 @@ export function searchLocationsLocal(query: string): GeoSearchResult[] {
 export async function searchLocations(query: string): Promise<GeoSearchResult[]> {
   if (!query.trim()) return [];
 
-  // Try OpenStreetMap Nominatim first for worldwide city/country coverage
   try {
-    const nominatimUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=10&addressdetails=1`;
+    const nominatimUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=10&addressdetails=1&accept-language=en`;
     const response = await fetch(nominatimUrl, {
       headers: { 'Accept-Language': 'en' },
     });
@@ -217,7 +216,6 @@ export async function searchLocations(query: string): Promise<GeoSearchResult[]>
 
     return results;
   } catch {
-    // Fallback to local hardcoded database if Nominatim is unavailable
     return searchLocationsLocal(query);
   }
 }
@@ -321,7 +319,6 @@ export function getMapMarkers(product: string, location: LocationInfo): MapMarke
   const storeNames = ['Global Trade Co.', 'Prime Source Ltd.', 'Metro Wholesale', 'Direct Factory Outlet', 'Apex Imports', 'Sunrise Trading', 'Orient Market', 'Continental Supplies', 'Pacific Distributors', 'Elite Commerce', 'Worldwide Bazaar', 'City Mart Wholesale'];
   const productContext = product || 'general goods';
 
-  // Ensure at least 3 verified local stores (free-accessible)
   const freeStoreNames = ['Verified Trade Hub', 'Certified Commerce Co.', 'Trusted Source Ltd.'];
   for (let i = 0; i < 3; i++) {
     const latOffset = (rng() - 0.5) * 1.5;
@@ -344,7 +341,6 @@ export function getMapMarkers(product: string, location: LocationInfo): MapMarke
     });
   }
 
-  // Generate additional markers — wholesale and production are PRO-locked
   const additionalCount = 5 + Math.floor(rng() * 5);
   const types: MapMarker['type'][] = ['store', 'wholesale', 'production'];
 
